@@ -53,7 +53,7 @@
    *        photo rows use `src` (direct image URL); video rows use `yt_id`.
    * ========================================================================== */
   const CONFIG = {
-    SHEET_ID: "",            // e.g. "1AbC...xyz"  (leave "" to use sample data)
+    SHEET_ID: "1DPKYHhQEapdPYMoSotsTwTZetpbx2SGn5AtJkH_7S3I",  // live Google Sheet
     ALBUMS_SHEET: "Albums",  // tab name for the albums sheet
     MEDIA_SHEET: "Media",    // tab name for the media sheet
   };
@@ -134,7 +134,9 @@
 
   function rowsToObjects(rows) {
     if (!rows.length) return [];
-    const headers = rows[0].map((h) => h.trim());
+    // Lowercase header keys so column names are matched case-insensitively
+    // (e.g. "Album_id", "Order" still resolve to album_id / order).
+    const headers = rows[0].map((h) => h.trim().toLowerCase());
     return rows.slice(1)
       .filter((r) => r.some((c) => c && c.trim() !== ""))
       .map((r) => {
