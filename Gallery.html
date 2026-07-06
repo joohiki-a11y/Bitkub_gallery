@@ -38,19 +38,31 @@
   /* ============================================================================
    *  CONFIGURATION
    *  ---------------------------------------------------------------------------
-   *  To drive this gallery from a Google Sheet, fill in SHEET_ID below. Until
-   *  then the page runs on the built-in sample data (see SAMPLE_DATA).
+   *  This gallery is driven ENTIRELY by the Google Sheet named in SHEET_ID
+   *  below (no sample/placeholder data). If the sheet can't be read, the page
+   *  shows an explicit on-page message instead of any fallback content.
    *
    *  Sheet setup (from the design chats):
    *    - Share the sheet: "Anyone with the link" → Viewer.
    *    - Two tabs joined by album_id:
    *
-   *      Tab "Albums": album_id | title | title_en | client | year | cover | desc
-   *      Tab "Media" : album_id | order | type | mtype | label | src | yt_id
+   *      Tab "Albums": album_id | category | title | title_en | client | year | cover | desc | photos | videos
+   *      Tab "Media" : album_id | order | type | mtype | label | src | yt_id   (optional)
    *
-   *        type  ∈ { photo, video }
-   *        mtype ∈ { photo, video, youtube, short, highlight }   ← drives the tabs
-   *        photo rows use `src` (direct image URL); video rows use `yt_id`.
+   *        category ∈ { photo, video, youtube, short, highlight }  ← the work's
+   *          own bucket; drives which filter tab it appears under. Photo works
+   *          are photo albums; the video kinds group under the "Video" tab.
+   *          (If left blank, it's inferred: any video inside ⇒ video, else photo.)
+   *
+   *      TWO WAYS to give a work its media — use either or both:
+   *        A) Inline in the Albums row (simplest — no Media tab needed):
+   *           `photos` = one or more direct image URLs, comma/newline separated.
+   *           `videos` = one or more YouTube links/ids, comma/newline separated.
+   *           → A photos-only album = one Albums row with the `photos` cell filled.
+   *        B) One row per item in the Media tab (fine control: label, order, mtype):
+   *           type ∈ { photo, video }; mtype ∈ { photo, video, youtube, short, highlight };
+   *           photo rows use `src` (direct image URL), video rows use `yt_id`.
+   *           A video work may also include photo rows (behind-the-scenes).
    * ========================================================================== */
   const CONFIG = {
     SHEET_ID: "1DPKYHhQEapdPYMoSotsTwTZetpbx2SGn5AtJkH_7S3I",  // live Google Sheet
@@ -61,46 +73,31 @@
   const GREEN = "#02D767";
   const TYPE_SHORT = { photo: "ภาพ", video: "วิดีโอ", youtube: "YouTube", short: "Short", highlight: "Highlight" };
   const MTYPE_ORDER = ["photo", "video", "youtube", "short", "highlight"];
+  const VIDEO_CATS = ["video", "youtube", "short", "highlight"];
+
+  // Does a work belong under the given filter tab? Filtering is by the work's
+  // own `category` (not by the media it contains), so photo and video work
+  // stay cleanly separated. The generic "video" tab groups all video kinds.
+  function inTab(work, tab) {
+    if (tab === "all") return true;
+    if (tab === "video") return VIDEO_CATS.includes(work.category);
+    return work.category === tab;
+  }
 
   const ytThumb = (yt, res) => `https://i.ytimg.com/vi/${yt}/${res || "hqdefault"}.jpg`;
 
-  /* ---- Built-in sample data (identical to the design prototype) ------------- */
-  const SAMPLE_DATA = (() => {
-    const ph = (seed, n) => Array.from({ length: n }, (_, i) => ({
-      type: "photo", mtype: "photo",
-      src: `https://picsum.photos/seed/${seed}-${i + 1}/900/650`,
-      full: `https://picsum.photos/seed/${seed}-${i + 1}/1600/1100`,
-    }));
-    const v = (yt, label, mtype) => ({ type: "video", mtype, yt, label });
-    const cover = (seed) => `https://picsum.photos/seed/${seed}-1/1200/700`;
-    const ytcover = (yt) => ytThumb(yt, "maxresdefault");
-    return [
-      { id: "a1", title: "เปิดตัว Bitkub Chain", titleEn: "Bitkub Chain Launch", client: "Bitkub Blockchain", year: "2025", cover: ytcover("Nfnt5Mvg9Y0"),
-        desc: "งานเปิดตัวเครือข่ายบล็อกเชน เก็บงานครบทั้งภาพนิ่งบรรยากาศงาน วิดีโอไฮไลต์ และคลิปสั้นสำหรับโซเชียลในอัลบั้มเดียว",
-        media: [...ph("a1", 6), v("Nfnt5Mvg9Y0", "ไฮไลต์งานเปิดตัว 3 นาที", "highlight"), v("LXb3EKWsInQ", "สรุปงาน 60 วินาที", "highlight"), v("1La4QzGeaaQ", "คลิปสั้นบรรยากาศงาน", "short"), v("V-_O7nl0Ii0", "ทีเซอร์ก่อนงาน", "short")] },
-      { id: "a2", title: "แถลงข่าวประจำปี 2025", titleEn: "Annual Press Conference", client: "Corporate Comms", year: "2025", cover: cover("mer-press"),
-        desc: "รวมงานถ่ายทำการแถลงข่าวประจำปี ทั้งภาพนิ่งสำหรับสื่อ บันทึกเต็มบนยูทูบ และสปอตสรุปวิสัยทัศน์องค์กร",
-        media: [...ph("mer-press", 8), v("ScMzIvxBSi4", "บันทึกการแถลงข่าวฉบับเต็ม", "youtube"), v("LXb3EKWsInQ", "สปอตสรุปวิสัยทัศน์", "video")] },
-      { id: "a3", title: "แคมเปญ Roots กาแฟ", titleEn: "Roots Coffee Campaign", client: "Pacamara Coffee", year: "2025", cover: ytcover("LXb3EKWsInQ"),
-        desc: "แคมเปญแบรนด์กาแฟครบวงจร ตั้งแต่หนังแบรนด์ เวอร์ชันตัดสั้น รีลแนวตั้ง ไปจนถึงภาพถ่ายโปรดักต์",
-        media: [v("LXb3EKWsInQ", "หนังแบรนด์ 90 วินาที", "video"), v("Scxs7L0vhZ4", "เวอร์ชันตัดสั้น 30 วินาที", "video"), v("1La4QzGeaaQ", "รีลแนวตั้งสำหรับโซเชียล", "short"), ...ph("mer-roots", 5)] },
-      { id: "a4", title: "คอนเสิร์ตการกุศล", titleEn: "Charity Live", client: "GMM Live", year: "2024", cover: ytcover("60ItHLz5WEA"),
-        desc: "เก็บงานคอนเสิร์ตการกุศลกลางแจ้งด้วยกล้องหลายตัว ทั้งวิดีโอไฮไลต์ ภาพมุมสูงจากสลิงแคม และภาพนิ่งบรรยากาศ",
-        media: [v("60ItHLz5WEA", "ไฮไลต์คอนเสิร์ต", "highlight"), v("aqz-KE-bpKQ", "มุมสูงสลิงแคม", "highlight"), ...ph("mer-live", 7), v("kJQP7kiw5Fk", "รีลช่วงพีคของงาน", "short")] },
-      { id: "a5", title: "ซีรีส์ The Makers", titleEn: "The Makers Series", client: "ช่อง Bitkub", year: "2025", cover: ytcover("ScMzIvxBSi4"),
-        desc: "อัลบั้มซีรีส์สารคดีช่างฝีมือไทย รวมตอนที่ออกอากาศบนยูทูบ พร้อมภาพนิ่งเบื้องหลังการถ่ายทำแต่ละตอน",
-        media: [v("ScMzIvxBSi4", "EP.04 — ช่างไม้", "youtube"), v("hHW1oY26kxQ", "EP.03 — ช่างทอง", "youtube"), v("1La4QzGeaaQ", "EP.02 — ช่างปั้น", "youtube"), ...ph("mer-makers", 4)] },
-      { id: "a6", title: "แฟชั่นวีก 2025", titleEn: "Fashion Week", client: "ELLE Thailand", year: "2025", cover: cover("mer-fashion"),
-        desc: "งานแฟชั่นวีกเก็บครบทุกมุม ทั้งภาพรันเวย์และแบ็กสเตจ รีลแนวตั้งรายวัน และอาฟเตอร์มูฟวีสรุปงาน",
-        media: [...ph("mer-fashion", 9), v("1La4QzGeaaQ", "รีลรันเวย์ Day 1", "short"), v("V-_O7nl0Ii0", "รีล Finale", "short"), v("aqz-KE-bpKQ", "อาฟเตอร์มูฟวีสรุปงาน", "video")] },
-      { id: "a7", title: "เปิดตัวรถยนต์รุ่นใหม่", titleEn: "Auto Launch", client: "Mercedes-Benz TH", year: "2025", cover: ytcover("Nfnt5Mvg9Y0"),
-        desc: "งานเปิดตัวรถยนต์รุ่นใหม่ ส่งมอบภายใน 48 ชั่วโมง ทั้งวิดีโอไฮไลต์งาน ภาพนิ่งโปรดักต์ และคลิปสั้นโปรโมต",
-        media: [v("Nfnt5Mvg9Y0", "ไฮไลต์งาน 3 นาที", "highlight"), ...ph("mer-auto", 6), v("60ItHLz5WEA", "คลิปสั้นรถรุ่นใหม่", "short")] },
-      { id: "a8", title: "ครบรอบ 5 ปีบริษัท", titleEn: "5th Anniversary", client: "Bitkub Media", year: "2024", cover: cover("mer-anniv"),
-        desc: "อัลบั้มฉลองครบรอบ 5 ปี รวมภาพนิ่งทีมงาน วิดีโอย้อนเส้นทาง บทสัมภาษณ์ผู้บริหาร และรีลขอบคุณ",
-        media: [...ph("mer-anniv", 6), v("LXb3EKWsInQ", "วิดีโอย้อนเส้นทาง 5 ปี", "video"), v("ScMzIvxBSi4", "สัมภาษณ์ผู้บริหาร", "youtube"), v("kJQP7kiw5Fk", "รีลขอบคุณทีมงาน", "short")] },
-    ];
-  })();
+  // Extract a YouTube id from a full URL (watch?v=, youtu.be/, /shorts/, …),
+  // or return the input unchanged if it's already a bare id.
+  function ytId(s) {
+    s = (s || "").trim();
+    const m = s.match(/(?:v=|youtu\.be\/|\/shorts\/|\/embed\/|\/live\/)([A-Za-z0-9_-]{6,})/);
+    return m ? m[1] : s;
+  }
+
+  // Split a comma/newline-separated cell into a trimmed, non-empty list.
+  function splitList(s) {
+    return (s || "").split(/[\n,]+/).map((x) => x.trim()).filter(Boolean);
+  }
 
   /* ============================================================================
    *  GOOGLE SHEET LOADER
@@ -146,15 +143,59 @@
       });
   }
 
-  function sheetCsvUrl(id, sheetName) {
-    return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}` +
-      `/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+  // Read a sheet tab via the gviz JSON endpoint using JSONP (a <script> tag).
+  // A plain fetch() to Google Sheets is blocked cross-origin (CORS), but a
+  // <script> load is not subject to same-origin policy, so this works from any
+  // host. `headers=1` forces the first row to be treated as column headers.
+  let _jsonpSeq = 0;
+  function fetchSheet(id, sheetName) {
+    return new Promise((resolve, reject) => {
+      const cb = "__gvizCb_" + (++_jsonpSeq);
+      const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/gviz/tq` +
+        `?tqx=out:json;responseHandler:${cb}&headers=1&sheet=${encodeURIComponent(sheetName)}`;
+      const script = document.createElement("script");
+      let settled = false;
+      const cleanup = () => { delete window[cb]; script.remove(); clearTimeout(timer); };
+      const timer = setTimeout(() => {
+        if (settled) return; settled = true; cleanup();
+        reject(new Error(`หมดเวลาเชื่อมต่อ Google Sheet (timeout) — แท็บ "${sheetName}" (ตรวจการแชร์สิทธิ์/ชื่อแท็บ)`));
+      }, 15000);
+      window[cb] = (resp) => {
+        if (settled) return; settled = true; cleanup();
+        try {
+          if (resp && resp.status === "error") {
+            const e = resp.errors && resp.errors[0];
+            reject(new Error(((e && (e.detailed_message || e.message)) || "อ่านชีตไม่ได้") + ` — แท็บ "${sheetName}"`));
+          } else if (!resp || !resp.table) {
+            reject(new Error(`รูปแบบข้อมูลไม่ถูกต้องจากแท็บ "${sheetName}"`));
+          } else {
+            resolve(gvizToObjects(resp.table));
+          }
+        } catch (err) { reject(err); }
+      };
+      script.onerror = () => {
+        if (settled) return; settled = true; cleanup();
+        reject(new Error(`โหลดข้อมูลจาก Google ไม่ได้ — ตรวจการแชร์สิทธิ์และชื่อแท็บ "${sheetName}"`));
+      };
+      script.src = url;
+      document.head.appendChild(script);
+    });
   }
 
-  async function fetchSheet(id, sheetName) {
-    const res = await fetch(sheetCsvUrl(id, sheetName));
-    if (!res.ok) throw new Error(`HTTP ${res.status} for sheet "${sheetName}"`);
-    return rowsToObjects(parseCSV(await res.text()));
+  // Convert a gviz table ({cols:[{label}], rows:[{c:[{v}]}]}) into row objects
+  // keyed by lowercased header label (case-insensitive column matching).
+  function gvizToObjects(table) {
+    const headers = (table.cols || []).map((c, i) =>
+      (c && c.label && c.label.trim()) ? c.label.trim().toLowerCase() : ("col" + i));
+    return (table.rows || []).map((r) => {
+      const o = {};
+      (r.c || []).forEach((cell, i) => {
+        const h = headers[i]; if (!h) return;
+        const v = cell && cell.v != null ? cell.v : "";
+        o[h] = typeof v === "string" ? v.trim() : String(v);
+      });
+      return o;
+    }).filter((row) => Object.keys(row).some((k) => row[k] !== ""));
   }
 
   // Join Albums + Media rows into the album shape the UI renders.
@@ -168,7 +209,9 @@
     return albumRows
       .filter((a) => a.album_id)
       .map((a) => {
-        const media = (byAlbum[a.album_id] || [])
+        const catRaw = (a.category || "").toLowerCase().trim();
+        // 1) Media-tab rows (fine-grained control: per-item label, order, mtype).
+        const sheetMedia = (byAlbum[a.album_id] || [])
           .slice()
           .sort((x, y) => (parseFloat(x.order) || 0) - (parseFloat(y.order) || 0))
           .map((m) => {
@@ -177,19 +220,34 @@
               type: isVideo ? "video" : "photo",
               mtype: (m.mtype || m.type || "photo").toLowerCase(),
               label: m.label || "",
-              yt: m.yt_id || "",
+              yt: ytId(m.yt_id || ""),
               src: m.src || "",
               full: m.src || "",
             };
           });
+        // 2) Inline photos straight from the Albums row — a photos-only album
+        //    needs NO Media rows: just paste image URLs into the `photos` cell.
+        const inlinePhotos = splitList(a.photos).map((url) => ({
+          type: "photo", mtype: "photo", label: "", yt: "", src: url, full: url,
+        }));
+        // 3) Inline videos from the Albums row (YouTube links or ids).
+        const vMtype = VIDEO_CATS.includes(catRaw) ? catRaw : "video";
+        const inlineVideos = splitList(a.videos).map((v) => ({
+          type: "video", mtype: vMtype, label: "", yt: ytId(v), src: "", full: "",
+        }));
+        const media = [...sheetMedia, ...inlinePhotos, ...inlineVideos];
+
         // Cover: explicit column, else derive from the first media item.
         let cover = a.cover || "";
         if (!cover && media.length) {
           const first = media[0];
           cover = first.type === "video" ? ytThumb(first.yt, "maxresdefault") : first.src;
         }
+        // Category: explicit column wins; else infer (any video ⇒ video, else photo).
+        const category = catRaw || (media.some((m) => m.type === "video") ? "video" : "photo");
         return {
           id: a.album_id,
+          category,
           title: a.title || "",
           titleEn: a.title_en || "",
           client: a.client || "",
@@ -202,8 +260,15 @@
       .filter((a) => a.media.length > 0);
   }
 
+  // Data comes ONLY from the Google Sheet — no sample fallback. Status drives
+  // an explicit on-page message (loading / error / empty) so failures are
+  // visible without opening DevTools.
   function useGalleryData() {
-    const [state, setState] = useState({ data: SAMPLE_DATA, status: CONFIG.SHEET_ID ? "loading" : "ready" });
+    const [state, setState] = useState({
+      data: [],
+      status: CONFIG.SHEET_ID ? "loading" : "config",
+      error: "",
+    });
     useEffect(() => {
       if (!CONFIG.SHEET_ID) return;
       let alive = true;
@@ -215,16 +280,48 @@
           ]);
           const albums = buildAlbums(albumRows, mediaRows);
           if (!alive) return;
-          if (albums.length) setState({ data: albums, status: "ready" });
-          else setState({ data: SAMPLE_DATA, status: "ready" }); // empty sheet → fall back
+          if (albums.length) { setState({ data: albums, status: "ready", error: "" }); return; }
+          // Read succeeded but produced 0 albums — report exactly what came back
+          // so the cause is visible on-page (no DevTools needed).
+          const aKeys = albumRows[0] ? Object.keys(albumRows[0]).join(", ") : "(ไม่มีแถว)";
+          const mKeys = mediaRows[0] ? Object.keys(mediaRows[0]).join(", ") : "(ไม่มีแถว)";
+          const nMatched = mediaRows.filter((m) => m.album_id && albumRows.some((a) => a.album_id === m.album_id)).length;
+          setState({ data: [], status: "empty", error:
+            `อ่านชีตแล้ว — Albums ${albumRows.length} แถว, Media ${mediaRows.length} แถว, media ที่จับคู่ album_id ได้ ${nMatched} แถว. ` +
+            `คอลัมน์ Albums: [${aKeys}] · คอลัมน์ Media: [${mKeys}]. ` +
+            `แต่ละงานต้องมีสื่ออย่างน้อย 1 ชิ้น — ใส่ลิงก์รูปในคอลัมน์ "photos" ของแท็บ Albums (อัลบั้มรูปล้วนทำได้ในแถวเดียว), ใส่ลิงก์ YouTube ในคอลัมน์ "videos", หรือเพิ่มแถวในแท็บ Media ที่ album_id ตรงกัน` });
         } catch (e) {
-          console.error("[gallery] Google Sheet load failed — using sample data.", e);
-          if (alive) setState({ data: SAMPLE_DATA, status: "error" });
+          const msg = e && e.message ? e.message : String(e);
+          console.error("[gallery] Google Sheet load failed.", e);
+          if (alive) setState({ data: [], status: "error", error: msg });
         }
       })();
       return () => { alive = false; };
     }, []);
     return state;
+  }
+
+  /* ---- Full-width state panel (loading / error / empty / config) ----------- */
+  function StatePanel({ status, error }) {
+    if (status === "ready") return null;
+    const wrap = { gridColumn: "1 / -1", textAlign: "center", padding: "72px 20px" };
+    if (status === "loading") {
+      return html`<div style=${{ ...wrap, color: "#9a9a9a" }}>
+        <div style=${{ fontSize: "16px" }}>กำลังโหลดข้อมูลจาก Google Sheet…</div>
+      </div>`;
+    }
+    if (status === "error") {
+      return html`<div style=${wrap}>
+        <div style=${{ fontSize: "17px", color: "#c0392b", fontWeight: 600, marginBottom: "10px" }}>⚠️ ดึงข้อมูลจาก Google Sheet ไม่สำเร็จ</div>
+        <div style=${{ fontSize: "13.5px", color: "#8a8a8a", maxWidth: "560px", margin: "0 auto", wordBreak: "break-word" }}>${error}</div>
+        <div style=${{ fontSize: "13px", color: "#b0b0b0", marginTop: "14px", lineHeight: 1.6 }}>ตรวจว่า Sheet แชร์แบบ "Anyone with the link → Viewer" และชื่อแท็บเป็น Albums / Media</div>
+      </div>`;
+    }
+    if (status === "config") {
+      return html`<div style=${{ ...wrap, color: "#9a9a9a", fontSize: "16px" }}>ยังไม่ได้ตั้งค่า SHEET_ID ในไฟล์</div>`;
+    }
+    // empty
+    return html`<div style=${{ ...wrap, color: "#9a9a9a", fontSize: "16px" }}>${error || "ไม่พบข้อมูลในชีต"}</div>`;
   }
 
   /* ============================================================================
@@ -272,14 +369,15 @@
    *  APP
    * ========================================================================== */
   function App() {
-    const { data, status } = useGalleryData();
+    const { data, status, error } = useGalleryData();
     const [active, setActive] = useState("all");
     const [center, setCenter] = useState(0);
     const [openAlbumId, setOpenAlbumId] = useState(null);
     const [mediaIndex, setMediaIndex] = useState(null);
+    const [solo, setSolo] = useState(false); // opened straight into the lightbox (single-media work)
     const touchX = useRef(0);
 
-    const filtered = data.filter((d) => active === "all" || d.media.some((m) => m.mtype === active));
+    const filtered = data.filter((d) => inTab(d, active));
     const len = filtered.length;
 
     // Clamp center whenever the filtered list shrinks.
@@ -291,13 +389,22 @@
 
     const selectTab = (key) => { setActive(key); setCenter(0); };
     const step = (dir) => setCenter((c) => {
-      const l = data.filter((d) => active === "all" || d.media.some((m) => m.mtype === active)).length;
+      const l = data.filter((d) => inTab(d, active)).length;
       return Math.min(l - 1, Math.max(0, c + dir));
     });
-    const openAlbum = (id) => { document.body.style.overflow = "hidden"; setOpenAlbumId(id); setMediaIndex(null); };
-    const closeAlbum = () => { document.body.style.overflow = ""; setOpenAlbumId(null); setMediaIndex(null); };
+    // Single-media works (e.g. a lone video) open straight into the lightbox;
+    // multi-media works open the album grid first.
+    const openAlbum = (id) => {
+      const al = data.find((d) => d.id === id);
+      const isSolo = !!al && al.media.length === 1;
+      document.body.style.overflow = "hidden";
+      setOpenAlbumId(id);
+      setSolo(isSolo);
+      setMediaIndex(isSolo ? 0 : null);
+    };
+    const closeAlbum = () => { document.body.style.overflow = ""; setOpenAlbumId(null); setMediaIndex(null); setSolo(false); };
     const openMedia = (i) => setMediaIndex(i);
-    const closeMedia = () => setMediaIndex(null);
+    const closeMedia = () => { if (solo) closeAlbum(); else setMediaIndex(null); };
     const stepMedia = (dir) => {
       if (!album) return;
       const l = album.media.length;
@@ -318,7 +425,7 @@
       };
       window.addEventListener("keydown", onKey);
       return () => window.removeEventListener("keydown", onKey);
-    }, [mediaIndex, openAlbumId, album]);
+    }, [mediaIndex, openAlbumId, album, solo]);
 
     useEffect(() => () => { document.body.style.overflow = ""; }, []);
 
@@ -330,8 +437,7 @@
 
     const ac = filtered[curCenter];
     const activeTitle = ac ? ac.title : "";
-    const activeMeta = ac ? `${mediaSummary(ac.media).typesLabel} · ${ac.client} · ${ac.media.length} รายการ` : "";
-    const isEmpty = len === 0 && status !== "loading";
+    const activeMeta = ac ? `${TYPE_SHORT[ac.category] || ac.category} · ${ac.client} · ${ac.media.length} รายการ` : "";
     const showStage = len > 0;
 
     return html`
@@ -415,7 +521,8 @@
         ${/* ---- ALBUM GRID ---- */""}
         <main style=${{ padding: "clamp(28px,4vw,56px) clamp(20px,5vw,64px) clamp(60px,10vh,120px)", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(clamp(260px,30vw,340px),1fr))", gap: "clamp(18px,2vw,30px)" }}>
           ${filtered.map((d) => html`<${GridCard} key=${d.id} album=${d} onOpen=${() => openAlbum(d.id)} />`)}
-          ${isEmpty && html`<div style=${{ gridColumn: "1 / -1", textAlign: "center", padding: "64px 0", color: "#9a9a9a", fontSize: "16px" }}>ยังไม่มีอัลบั้มในหมวดนี้</div>`}
+          ${status !== "ready" && html`<${StatePanel} status=${status} error=${error} />`}
+          ${status === "ready" && len === 0 && html`<div style=${{ gridColumn: "1 / -1", textAlign: "center", padding: "64px 0", color: "#9a9a9a", fontSize: "16px" }}>ยังไม่มีอัลบั้มในหมวดนี้</div>`}
         </main>
 
         ${/* ---- FOOTER ---- */""}
@@ -423,11 +530,11 @@
           <${Lockup} logoHeight="30px" fontSize="clamp(19px,2.4vw,24px)" />
         </footer>
 
-        ${/* ---- ALBUM DETAIL OVERLAY ---- */""}
-        ${album && html`<${AlbumModal} album=${album} onClose=${closeAlbum} onOpenMedia=${openMedia} onStop=${(e) => e.stopPropagation()} />`}
+        ${/* ---- ALBUM DETAIL OVERLAY (hidden for single-media "solo" works) ---- */""}
+        ${album && !solo && html`<${AlbumModal} album=${album} onClose=${closeAlbum} onOpenMedia=${openMedia} onStop=${(e) => e.stopPropagation()} />`}
 
         ${/* ---- SINGLE MEDIA LIGHTBOX ---- */""}
-        ${album && mediaIndex != null && html`<${MediaLightbox} album=${album} index=${mediaIndex} onClose=${closeMedia} onPrev=${() => stepMedia(-1)} onNext=${() => stepMedia(1)} onStop=${(e) => e.stopPropagation()} />`}
+        ${album && mediaIndex != null && html`<${MediaLightbox} album=${album} index=${mediaIndex} single=${album.media.length <= 1} onClose=${closeMedia} onPrev=${() => stepMedia(-1)} onNext=${() => stepMedia(1)} onStop=${(e) => e.stopPropagation()} />`}
       </div>`;
   }
 
@@ -442,8 +549,8 @@
   function GridCard({ album, onOpen }) {
     const [hover, setHover] = useState(false);
     const [focus, setFocus] = useState(false);
-    const s = mediaSummary(album.media);
     const active = hover || focus;
+    const catLabel = TYPE_SHORT[album.category] || album.category;
     return html`
       <div role="button" tabindex="0"
         onClick=${onOpen}
@@ -456,7 +563,7 @@
           outline: focus ? `2px solid ${GREEN}` : "none", outlineOffset: focus ? "2px" : undefined }}>
         <div style=${{ position: "relative", aspectRatio: "16/9", overflow: "hidden", background: "linear-gradient(100deg,#ececec 30%,#f3f3f3 50%,#ececec 70%)", backgroundSize: "200% 100%", animation: "merShimmer 1.4s ease-in-out infinite" }}>
           <div style=${{ position: "absolute", inset: 0, backgroundImage: `url("${album.cover}")`, backgroundSize: "cover", backgroundPosition: "center", transition: "transform 0.8s cubic-bezier(0.2,0.8,0.2,1)", transform: hover ? "scale(1.06)" : "none" }}></div>
-          <div style=${{ position: "absolute", top: "12px", left: "12px", fontSize: "11px", fontWeight: 600, color: "#007339", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(4px)", padding: "5px 11px", borderRadius: "999px", pointerEvents: "none" }}>${s.typesLabel}</div>
+          <div style=${{ position: "absolute", top: "12px", left: "12px", fontSize: "11px", fontWeight: 600, color: "#007339", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(4px)", padding: "5px 11px", borderRadius: "999px", pointerEvents: "none" }}>${catLabel}</div>
           <div style=${{ position: "absolute", right: "12px", bottom: "12px", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 600, color: "#fff", background: "rgba(26,26,26,0.6)", backdropFilter: "blur(4px)", padding: "5px 11px", borderRadius: "999px", pointerEvents: "none" }}>
             <${StackGlyph} size="11px" radius="2px" bg="rgba(26,26,26,0.6)" />
             ${album.media.length} รายการ
@@ -510,7 +617,7 @@
             style=${{ position: "absolute", top: "18px", right: "18px", zIndex: 5, width: "38px", height: "38px", borderRadius: "50%", background: closeHover ? GREEN : "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${closeHover ? GREEN : "#e2e2e2"}`, color: closeHover ? "#fff" : "#404040", fontSize: "17px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, transition: "all 0.2s" }}>✕</button>
 
           <div style=${{ padding: "clamp(26px,3.4vw,46px) clamp(24px,3.4vw,46px) clamp(20px,2.6vw,30px)", borderBottom: "1px solid #ececec" }}>
-            <div style=${{ fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#00BF61", fontWeight: 600, marginBottom: "14px" }}>${s.typesLabel} · ${album.year} · ${s.breakdown}</div>
+            <div style=${{ fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#00BF61", fontWeight: 600, marginBottom: "14px" }}>${(TYPE_SHORT[album.category] || album.category)}${s.breakdown ? ` · ${s.breakdown}` : ""} · ${album.year}</div>
             <h2 style=${{ fontWeight: 500, fontSize: "clamp(26px,3.4vw,40px)", lineHeight: 1.18, margin: 0, color: "#1a1a1a" }}>${album.title}</h2>
             <div style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 500, fontSize: "16px", color: "#9a9a9a", marginTop: "5px" }}>${album.titleEn}</div>
             <p style=${{ fontWeight: 300, fontSize: "15.5px", lineHeight: 1.72, color: "#555", margin: "18px 0 0", maxWidth: "720px", textWrap: "pretty" }}>${album.desc}</p>
@@ -534,7 +641,7 @@
       style=${{ ...style, background: hover ? GREEN : "rgba(255,255,255,0.14)", border: `1px solid ${hover ? GREEN : "rgba(255,255,255,0.3)"}`, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>${label}</button>`;
   }
 
-  function MediaLightbox({ album, index, onClose, onPrev, onNext, onStop }) {
+  function MediaLightbox({ album, index, single, onClose, onPrev, onNext, onStop }) {
     const m = album.media[index];
     const isVideo = m.type === "video";
     const title = m.label || `${album.title} · ${index + 1}`;
@@ -542,8 +649,8 @@
       <div onClick=${onClose} style=${{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(15,15,15,0.86)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "clamp(12px,4vw,64px)", animation: "merFade 0.25s ease" }}>
 
         <${LightboxBtn} label="✕" onClick=${onClose} style=${{ position: "absolute", top: "20px", right: "20px", zIndex: 5, width: "42px", height: "42px", borderRadius: "50%", fontSize: "18px", lineHeight: 1 }} />
-        <${LightboxBtn} label="←" onClick=${onPrev} style=${{ position: "absolute", left: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />
-        <${LightboxBtn} label="→" onClick=${onNext} style=${{ position: "absolute", right: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />
+        ${!single && html`<${LightboxBtn} label="←" onClick=${onPrev} style=${{ position: "absolute", left: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />`}
+        ${!single && html`<${LightboxBtn} label="→" onClick=${onNext} style=${{ position: "absolute", right: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />`}
 
         <div onClick=${onStop} style=${{ width: "100%", maxWidth: "1100px", display: "flex", flexDirection: "column", alignItems: "center", gap: "18px", animation: "merPop 0.3s cubic-bezier(0.2,0.8,0.2,1) both" }}>
           ${isVideo
