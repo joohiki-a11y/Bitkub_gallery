@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bitkub Media Production — Production Gallery</title>
+<meta name="description" content="แกลเลอรีผลงานภาพและวิดีโอของ Bitkub Media Production — รวมงานถ่ายภาพ วิดีโอ YouTube TikTok และ Facebook">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Bitkub Media Production — Production Gallery">
+<meta property="og:description" content="แกลเลอรีผลงานภาพและวิดีโอของ Bitkub Media Production">
+<meta property="og:image" content="assets/logo.png">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2302D767'/%3E%3Cpath d='M13 10l9 6-9 6z' fill='%23fff'/%3E%3C/svg%3E">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,19 +26,36 @@
   @keyframes merPop   { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
   /* Hide native scrollbar on the sticky tab strip (matches prototype scrollbar-width:none) */
   .mer-noscroll::-webkit-scrollbar { display: none; }
+  /* Visible keyboard focus for the coverflow cards (replaces outline:none). */
+  .mer-cf:focus-visible { outline: 2px solid #02D767; outline-offset: 3px; }
+  /* Respect users who prefer less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important; scroll-behavior: auto !important;
+    }
+  }
 </style>
 </head>
 <body>
 <div id="root"></div>
 
-<!-- No build step: React 18 + htm (JSX-like tagged templates) from CDN. -->
-<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js" crossorigin></script>
+<!-- No build step: React 18 + htm (JSX-like tagged templates) from CDN.
+     React/ReactDOM pinned with Subresource Integrity; if any CDN script fails to
+     load, the boot guard below shows a message instead of a blank page. -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js" crossorigin="anonymous"></script>
 
 <script>
 (function () {
   "use strict";
+  // CDN guard: if React/ReactDOM/htm didn't load, show a message, not a blank page.
+  if (!window.React || !window.ReactDOM || !window.htm) {
+    var r = document.getElementById("root");
+    if (r) r.innerHTML = '<div style="font-family:sans-serif;color:#555;text-align:center;padding:80px 24px;font-size:16px">โหลดไลบรารีจาก CDN ไม่สำเร็จ — โปรดตรวจการเชื่อมต่ออินเทอร์เน็ตแล้วรีเฟรชหน้าอีกครั้ง</div>';
+    return;
+  }
   const { useState, useEffect, useRef, Fragment } = React;
   const html = htm.bind(React.createElement);
 
@@ -143,8 +167,16 @@
     if (/facebook\.com|fb\.watch|fb\.me/i.test(s)) {
       return { platform: "facebook", vid: "", vurl: s };
     }
-    const id = ytId(s);
-    return { platform: "youtube", vid: id, vurl: `https://www.youtube.com/watch?v=${id}` };
+    if (/youtube\.com|youtu\.be/i.test(s)) {
+      const id = ytId(s);
+      return { platform: "youtube", vid: id, vurl: `https://www.youtube.com/watch?v=${id}` };
+    }
+    // A bare 11-char token is a YouTube id; anything else is an unrecognised link
+    // (don't force it into a broken YouTube embed).
+    if (/^[A-Za-z0-9_-]{11}$/.test(s)) {
+      return { platform: "youtube", vid: s, vurl: `https://www.youtube.com/watch?v=${s}` };
+    }
+    return { platform: "unknown", vid: "", vurl: s };
   }
 
   // Build a video media item from any supported link (YouTube/TikTok/Facebook).
@@ -160,12 +192,15 @@
     return m.platform === "youtube" && m.vid ? ytThumb(m.vid, res) : "";
   }
 
-  // Embed player URL per platform.
+  // Embed player URL per platform ("" if the link can't be played inline).
   function videoEmbed(m) {
-    if (m.platform === "tiktok") return `https://www.tiktok.com/player/v1/${m.vid}?autoplay=1`;
+    if (m.platform === "tiktok") return m.vid ? `https://www.tiktok.com/player/v1/${m.vid}?autoplay=1` : "";
     if (m.platform === "facebook") return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(m.vurl)}&show_text=false&autoplay=true`;
-    const originParam = /^https?:$/.test(location.protocol) ? `&origin=${encodeURIComponent(location.origin)}` : "";
-    return `https://www.youtube.com/embed/${m.vid}?rel=0&modestbranding=1&playsinline=1&autoplay=1${originParam}`;
+    if (m.platform === "youtube") {
+      const originParam = /^https?:$/.test(location.protocol) ? `&origin=${encodeURIComponent(location.origin)}` : "";
+      return `https://www.youtube.com/embed/${m.vid}?rel=0&modestbranding=1&playsinline=1&autoplay=1${originParam}`;
+    }
+    return "";
   }
 
   // Extract a playlist id from a URL (?list=…) or return a bare id as-is.
@@ -185,7 +220,7 @@
       const url = "https://www.googleapis.com/youtube/v3/playlistItems" +
         `?part=snippet&maxResults=50&playlistId=${encodeURIComponent(pid)}` +
         `&key=${encodeURIComponent(apiKey)}${pageToken ? `&pageToken=${pageToken}` : ""}`;
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, 12000);
       if (!res.ok) {
         let msg = `HTTP ${res.status}`;
         try { const j = await res.json(); if (j.error && j.error.message) msg = j.error.message; } catch (e) {}
@@ -205,49 +240,26 @@
     return out;
   }
 
+  // fetch() with an abort timeout so a slow/hung request can't stall loading.
+  function fetchWithTimeout(url, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms || 12000);
+    return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+  }
+
+  // Run async `worker` over `items` with a bounded number of concurrent calls.
+  async function runPool(items, limit, worker) {
+    const out = []; let i = 0;
+    const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (i < items.length) { const idx = i++; out[idx] = await worker(items[idx], idx); }
+    });
+    await Promise.all(runners);
+    return out;
+  }
+
   /* ============================================================================
    *  GOOGLE SHEET LOADER
    * ========================================================================== */
-
-  // Minimal RFC-4180-ish CSV parser (handles quoted fields, escaped quotes,
-  // embedded commas and newlines).
-  function parseCSV(text) {
-    const rows = [];
-    let row = [], field = "", inQuotes = false;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (inQuotes) {
-        if (c === '"') {
-          if (text[i + 1] === '"') { field += '"'; i++; }
-          else inQuotes = false;
-        } else field += c;
-      } else if (c === '"') {
-        inQuotes = true;
-      } else if (c === ",") {
-        row.push(field); field = "";
-      } else if (c === "\n") {
-        row.push(field); rows.push(row); row = []; field = "";
-      } else if (c === "\r") {
-        // ignore; \n handles the row break
-      } else field += c;
-    }
-    if (field.length || row.length) { row.push(field); rows.push(row); }
-    return rows;
-  }
-
-  function rowsToObjects(rows) {
-    if (!rows.length) return [];
-    // Lowercase header keys so column names are matched case-insensitively
-    // (e.g. "Album_id", "Order" still resolve to album_id / order).
-    const headers = rows[0].map((h) => h.trim().toLowerCase());
-    return rows.slice(1)
-      .filter((r) => r.some((c) => c && c.trim() !== ""))
-      .map((r) => {
-        const o = {};
-        headers.forEach((h, i) => { o[h] = (r[i] || "").trim(); });
-        return o;
-      });
-  }
 
   // Read a sheet tab via the gviz JSON endpoint using JSONP (a <script> tag).
   // A plain fetch() to Google Sheets is blocked cross-origin (CORS), but a
@@ -312,7 +324,7 @@
       if (!key) continue;
       (byAlbum[key] || (byAlbum[key] = [])).push(m);
     }
-    return albumRows
+    const built = albumRows
       .filter((a) => a.album_id)
       .map((a) => {
         const catRaw = (a.category || "").toLowerCase().trim();
@@ -363,6 +375,14 @@
       })
       // Keep works that already have media OR a playlist still to be expanded.
       .filter((a) => a.media.length > 0 || a.playlists.length > 0);
+    // Ensure unique ids so React keys don't collide and openAlbum() finds the
+    // right work when the sheet accidentally repeats an album_id.
+    const seen = new Map();
+    for (const a of built) {
+      if (seen.has(a.id)) { const n = seen.get(a.id) + 1; seen.set(a.id, n); a.id = `${a.id}-${n}`; }
+      else seen.set(a.id, 1);
+    }
+    return built;
   }
 
   // Expand each album's `playlists` into individual video cards via the YouTube
@@ -377,14 +397,14 @@
       return errors;
     }
     const byId = {};
-    await Promise.all(ids.map(async (pid) => {
+    await runPool(ids, 4, async (pid) => {
       try { byId[pid] = await fetchPlaylistItems(pid, CONFIG.YT_API_KEY); }
       catch (e) {
         console.error("[gallery] playlist fetch failed:", pid, e);
         byId[pid] = null;
         errors.push(`เพลย์ลิสต์ ${pid}: ${e && e.message ? e.message : String(e)}`);
       }
-    }));
+    });
     for (const a of albums) {
       for (const pid of (a.playlists || [])) {
         const items = byId[pid];
@@ -413,12 +433,12 @@
     }
     if (!urls.size) return;
     const map = {};
-    await Promise.all([...urls].map(async (url) => {
+    await runPool([...urls], 5, async (url) => {
       try {
-        const res = await fetch("https://www.tiktok.com/oembed?url=" + encodeURIComponent(url));
+        const res = await fetchWithTimeout("https://www.tiktok.com/oembed?url=" + encodeURIComponent(url), 8000);
         if (res.ok) { const j = await res.json(); if (j && j.thumbnail_url) map[url] = j.thumbnail_url; }
-      } catch (e) { /* CORS/blocked → keep the neutral tile */ }
-    }));
+      } catch (e) { /* CORS/blocked/timeout → keep the neutral tile */ }
+    });
     for (const a of albums) {
       for (const m of a.media) if (m.platform === "tiktok" && map[m.vurl]) m.thumb = map[m.vurl];
       if (!a.cover && a.media.length) {
@@ -472,24 +492,43 @@
       let alive = true;
       (async () => {
         try {
+          // Albums is required; Media is OPTIONAL — a photos-only gallery needs
+          // no Media tab, so a missing/unreadable Media tab must not fail the page.
           const [albumRows, mediaRows] = await Promise.all([
             fetchSheet(CONFIG.SHEET_ID, CONFIG.ALBUMS_SHEET),
-            fetchSheet(CONFIG.SHEET_ID, CONFIG.MEDIA_SHEET),
+            fetchSheet(CONFIG.SHEET_ID, CONFIG.MEDIA_SHEET).catch(() => []),
           ]);
           const albums = buildAlbums(albumRows, mediaRows);
+          if (!alive) return;
+
+          // Warn (on-page) about duplicate album_id values in the sheet.
+          const rawIds = albumRows.map((r) => r.album_id).filter(Boolean);
+          const dups = [...new Set(rawIds.filter((id, i) => rawIds.indexOf(id) !== i))];
+          const dupWarn = dups.length ? `พบ album_id ซ้ำในชีต: ${dups.join(", ")} — ระบบแยกให้อัตโนมัติ แต่ควรตั้งให้ไม่ซ้ำ` : "";
+          const mergeWarn = (a, b) => [a, b].filter(Boolean).join(" · ");
+
+          // Show whatever already has media RIGHT AWAY, then enrich (playlists +
+          // TikTok covers) in the background so slow third-party calls can't hold
+          // the whole page at "loading".
+          const ready = (warn) => {
+            if (!alive) return false;
+            const withMedia = flattenSpread(albums).filter((a) => a.media.length > 0);
+            if (withMedia.length) { setState({ data: withMedia, status: "ready", error: "", warn: warn || "" }); return true; }
+            return false;
+          };
+          const shownEarly = ready(dupWarn);
+
           const plErrors = await expandPlaylists(albums); // pull playlist videos in as cards
           await enrichThumbs(albums);                     // best-effort TikTok covers
           if (!alive) return;
-          const withMedia = flattenSpread(albums).filter((a) => a.media.length > 0);
-          if (withMedia.length) {
-            setState({ data: withMedia, status: "ready", error: "", warn: plErrors.join(" · ") });
-            return;
-          }
+          if (ready(mergeWarn(dupWarn, plErrors.join(" · ")))) return;
+
+          // Nothing to show. Prefer the playlist error if that's why it's empty.
           if (plErrors.length) {
-            setState({ data: [], status: "error", warn: "",
-              error: "ดึงเพลย์ลิสต์ไม่สำเร็จ — " + plErrors.join(" · ") });
+            setState({ data: [], status: "error", warn: "", error: "ดึงเพลย์ลิสต์ไม่สำเร็จ — " + plErrors.join(" · ") });
             return;
           }
+          if (shownEarly) return; // something was shown; don't overwrite with empty
           // Read succeeded but produced 0 albums — report exactly what came back
           // so the cause is visible on-page (no DevTools needed).
           const aKeys = albumRows[0] ? Object.keys(albumRows[0]).join(", ") : "(ไม่มีแถว)";
@@ -498,7 +537,7 @@
           setState({ data: [], status: "empty", error:
             `อ่านชีตแล้ว — Albums ${albumRows.length} แถว, Media ${mediaRows.length} แถว, media ที่จับคู่ album_id ได้ ${nMatched} แถว. ` +
             `คอลัมน์ Albums: [${aKeys}] · คอลัมน์ Media: [${mKeys}]. ` +
-            `แต่ละงานต้องมีสื่ออย่างน้อย 1 ชิ้น — ใส่ลิงก์รูปในคอลัมน์ "photos" ของแท็บ Albums (อัลบั้มรูปล้วนทำได้ในแถวเดียว), ใส่ลิงก์ YouTube ในคอลัมน์ "videos", หรือเพิ่มแถวในแท็บ Media ที่ album_id ตรงกัน`,
+            `แต่ละงานต้องมีสื่ออย่างน้อย 1 ชิ้น — ใส่ลิงก์รูปในคอลัมน์ "photos" ของแท็บ Albums (อัลบั้มรูปล้วนทำได้ในแถวเดียว), ใส่ลิงก์ YouTube/TikTok/Facebook ในคอลัมน์ "videos", หรือเพิ่มแถวในแท็บ Media ที่ album_id ตรงกัน`,
             warn: "" });
         } catch (e) {
           const msg = e && e.message ? e.message : String(e);
@@ -509,6 +548,36 @@
       return () => { alive = false; };
     }, []);
     return state;
+  }
+
+  // Dialog a11y: trap Tab inside the overlay while open, move focus in on open,
+  // and restore it to the triggering element on close. Attach the returned ref
+  // to the element that contains the dialog's focusable controls.
+  function useDialog() {
+    const ref = useRef(null);
+    useEffect(() => {
+      const prev = document.activeElement;
+      const el = ref.current;
+      const focusables = () => el
+        ? Array.from(el.querySelectorAll('a[href],button:not([disabled]),iframe,[tabindex]:not([tabindex="-1"])')).filter((x) => x.offsetParent !== null)
+        : [];
+      const firstEl = focusables()[0] || el;
+      if (firstEl && firstEl.focus) firstEl.focus();
+      const onKey = (e) => {
+        if (e.key !== "Tab") return;
+        const items = focusables();
+        if (!items.length) return;
+        const a = items[0], b = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === a) { e.preventDefault(); b.focus(); }
+        else if (!e.shiftKey && document.activeElement === b) { e.preventDefault(); a.focus(); }
+      };
+      if (el) el.addEventListener("keydown", onKey);
+      return () => {
+        if (el) el.removeEventListener("keydown", onKey);
+        if (prev && prev.focus) prev.focus();
+      };
+    }, []);
+    return ref;
   }
 
   /* ---- Full-width state panel (loading / error / empty / config) ----------- */
@@ -714,7 +783,8 @@
                 const abs = Math.abs(off);
                 const isCenter = off === 0;
                 return html`
-                  <div key=${d.id} role="button" tabindex="0"
+                  <div key=${d.id} class="mer-cf" role="button" tabindex=${abs > 2 ? -1 : 0}
+                    aria-label=${isCenter ? `เปิด ${d.title}` : `เลื่อนไป ${d.title}`}
                     onClick=${() => (isCenter ? openAlbum(d.id) : setCenter(i))}
                     onKeyDown=${(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); isCenter ? openAlbum(d.id) : setCenter(i); } }}
                     style=${{ position: "absolute", top: "50%", left: "50%", width: "clamp(280px, 44vw, 580px)", aspectRatio: "16 / 9",
@@ -723,7 +793,7 @@
                       zIndex: String(30 - abs), opacity: abs > 2 ? 0 : 1,
                       boxShadow: isCenter ? "0 34px 70px -18px rgba(0,0,0,0.14), 0 14px 34px -12px rgba(0,0,0,0.08)" : "0 22px 50px -20px rgba(0,0,0,0.10)",
                       border: "1px solid rgba(0,0,0,0.06)", transition: "transform 0.6s cubic-bezier(0.2,0.8,0.2,1), opacity 0.5s, box-shadow 0.5s",
-                      cursor: "pointer", pointerEvents: abs > 2 ? "none" : "auto", outline: "none" }}>
+                      cursor: "pointer", pointerEvents: abs > 2 ? "none" : "auto" }}>
                     ${d.cover
                       ? html`<img src=${d.cover} alt="" loading="lazy" onError=${coverStepDown} onLoad=${coverOnLoad} style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />`
                       : html`<${CoverTile} platform=${d.media[0] && d.media[0].platform} />`}
@@ -744,7 +814,7 @@
 
             <div style=${{ display: "flex", justifyContent: "center", gap: "14px", marginBottom: "clamp(18px,3vh,36px)" }}>
               ${["←", "→"].map((arrow, k) => html`
-                <${ArrowBtn} key=${arrow} label=${arrow} onClick=${() => step(k === 0 ? -1 : 1)} />`)}
+                <${ArrowBtn} key=${arrow} label=${arrow} ariaLabel=${k === 0 ? "ก่อนหน้า" : "ถัดไป"} onClick=${() => step(k === 0 ? -1 : 1)} />`)}
             </div>
           <//>`}
 
@@ -787,9 +857,9 @@
   }
 
   /* ---- Circular arrow button (coverflow nav) ------------------------------- */
-  function ArrowBtn({ label, onClick }) {
+  function ArrowBtn({ label, ariaLabel, onClick }) {
     const [hover, setHover] = useState(false);
-    return html`<button onClick=${onClick} onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
+    return html`<button onClick=${onClick} aria-label=${ariaLabel} onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
       style=${{ width: "46px", height: "46px", borderRadius: "50%", background: "#fff", border: `1px solid ${hover ? GREEN : "#e2e2e2"}`, color: hover ? GREEN : "#404040", cursor: "pointer", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>${label}</button>`;
   }
 
@@ -800,7 +870,7 @@
     const active = hover || focus;
     const catLabel = album.category;
     return html`
-      <div role="button" tabindex="0"
+      <div role="button" tabindex="0" aria-label=${`เปิด ${album.title}`}
         onClick=${onOpen}
         onKeyDown=${(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
         onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
@@ -836,7 +906,7 @@
     const isVideo = item.type === "video";
     const thumb = isVideo ? videoThumb(item, "hqdefault") : item.src;
     return html`
-      <div role="button" tabindex="0"
+      <div role="button" tabindex="0" aria-label=${item.label || (item.type === "video" ? "เล่นวิดีโอ" : "ดูรูป")}
         onClick=${onOpen}
         onKeyDown=${(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
         onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
@@ -859,11 +929,12 @@
   function AlbumModal({ album, onClose, onOpenMedia, onStop }) {
     const [closeHover, setCloseHover] = useState(false);
     const s = mediaSummary(album.media);
+    const dlg = useDialog();
     return html`
       <div onClick=${onClose} style=${{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,26,26,0.55)", backdropFilter: "blur(7px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "clamp(12px,3vw,48px)", animation: "merFade 0.3s ease", overflowY: "auto" }}>
-        <div onClick=${onStop} style=${{ position: "relative", width: "100%", maxWidth: "1120px", background: "#ffffff", borderRadius: "18px", overflow: "hidden", boxShadow: "0 40px 100px rgba(0,0,0,0.4)", animation: "merRise 0.4s cubic-bezier(0.2,0.8,0.2,1) both", margin: "auto" }}>
+        <div ref=${dlg} role="dialog" aria-modal="true" aria-label=${album.title} tabindex="-1" onClick=${onStop} style=${{ position: "relative", width: "100%", maxWidth: "1120px", background: "#ffffff", borderRadius: "18px", overflow: "hidden", boxShadow: "0 40px 100px rgba(0,0,0,0.4)", animation: "merRise 0.4s cubic-bezier(0.2,0.8,0.2,1) both", margin: "auto", outline: "none" }}>
 
-          <button onClick=${onClose} onMouseEnter=${() => setCloseHover(true)} onMouseLeave=${() => setCloseHover(false)}
+          <button onClick=${onClose} aria-label="ปิด" onMouseEnter=${() => setCloseHover(true)} onMouseLeave=${() => setCloseHover(false)}
             style=${{ position: "absolute", top: "18px", right: "18px", zIndex: 5, width: "38px", height: "38px", borderRadius: "50%", background: closeHover ? GREEN : "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${closeHover ? GREEN : "#e2e2e2"}`, color: closeHover ? "#fff" : "#404040", fontSize: "17px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, transition: "all 0.2s" }}>✕</button>
 
           <div style=${{ padding: "clamp(26px,3.4vw,46px) clamp(24px,3.4vw,46px) clamp(20px,2.6vw,30px)", borderBottom: "1px solid #ececec" }}>
@@ -885,9 +956,9 @@
   }
 
   /* ---- Single media lightbox ----------------------------------------------- */
-  function LightboxBtn({ label, style, onClick }) {
+  function LightboxBtn({ label, ariaLabel, style, onClick }) {
     const [hover, setHover] = useState(false);
-    return html`<button onClick=${onClick} onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
+    return html`<button onClick=${onClick} aria-label=${ariaLabel} onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
       style=${{ ...style, background: hover ? GREEN : "rgba(255,255,255,0.14)", border: `1px solid ${hover ? GREEN : "rgba(255,255,255,0.3)"}`, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>${label}</button>`;
   }
 
@@ -903,18 +974,21 @@
     const videoBox = isTikTok
       ? { height: "min(80vh, 760px)", aspectRatio: "9 / 16", maxWidth: "100%", borderRadius: "14px", overflow: "hidden", background: "#000", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }
       : { width: "100%", aspectRatio: "16 / 9", borderRadius: "14px", overflow: "hidden", background: "#000", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" };
+    const dlg = useDialog();
     return html`
-      <div onClick=${onClose} style=${{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(15,15,15,0.86)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "clamp(12px,4vw,64px)", animation: "merFade 0.25s ease" }}>
+      <div ref=${dlg} role="dialog" aria-modal="true" aria-label=${title} tabindex="-1" onClick=${onClose} style=${{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(15,15,15,0.86)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "clamp(12px,4vw,64px)", animation: "merFade 0.25s ease", outline: "none" }}>
 
-        <${LightboxBtn} label="✕" onClick=${onClose} style=${{ position: "absolute", top: "20px", right: "20px", zIndex: 5, width: "42px", height: "42px", borderRadius: "50%", fontSize: "18px", lineHeight: 1 }} />
-        ${!single && html`<${LightboxBtn} label="←" onClick=${onPrev} style=${{ position: "absolute", left: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />`}
-        ${!single && html`<${LightboxBtn} label="→" onClick=${onNext} style=${{ position: "absolute", right: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />`}
+        <${LightboxBtn} label="✕" ariaLabel="ปิด" onClick=${onClose} style=${{ position: "absolute", top: "20px", right: "20px", zIndex: 5, width: "42px", height: "42px", borderRadius: "50%", fontSize: "18px", lineHeight: 1 }} />
+        ${!single && html`<${LightboxBtn} label="←" ariaLabel="ก่อนหน้า" onClick=${onPrev} style=${{ position: "absolute", left: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />`}
+        ${!single && html`<${LightboxBtn} label="→" ariaLabel="ถัดไป" onClick=${onNext} style=${{ position: "absolute", right: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />`}
 
         <div onClick=${onStop} style=${{ width: "100%", maxWidth: "1100px", display: "flex", flexDirection: "column", alignItems: "center", gap: "18px", animation: "merPop 0.3s cubic-bezier(0.2,0.8,0.2,1) both" }}>
           ${isVideo
-            ? html`<div style=${videoBox}>
-                <iframe src=${embedSrc} style=${{ width: "100%", height: "100%", border: 0, display: "block" }} referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen=${true}></iframe>
-              </div>`
+            ? (embedSrc
+                ? html`<div style=${videoBox}>
+                    <iframe src=${embedSrc} style=${{ width: "100%", height: "100%", border: 0, display: "block" }} referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen=${true}></iframe>
+                  </div>`
+                : html`<div style=${{ width: "100%", aspectRatio: "16 / 9", borderRadius: "14px", background: "#000", color: "rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "24px", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>ลิงก์นี้เล่นในหน้าเว็บไม่ได้ — กด "${watchLabel}" ด้านล่างเพื่อเปิดในแหล่งที่มา</div>`)
             : html`<div style=${{ width: "100%", maxWidth: "1100px", aspectRatio: "16 / 9", borderRadius: "14px", backgroundImage: `url("${m.full || m.src}")`, backgroundSize: "contain", backgroundPosition: "center", backgroundRepeat: "no-repeat", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}></div>`}
           <div style=${{ display: "flex", alignItems: "center", gap: "16px", color: "#fff", flexWrap: "wrap", justifyContent: "center" }}>
             <span style=${{ fontWeight: 500, fontSize: "15px" }}>${title}</span>
