@@ -38,7 +38,7 @@ function loadModule() {
     inner +
     " return { parseVideo, videoItem, videoEmbed, videoThumb, buildAlbums, gvizToObjects, " +
     "buildTabs, expandPlaylists, enrichThumbs, flattenSpread, ytId, playlistId, splitList, " +
-    "imageVariant, imageSrcSet }; })";
+    "imageVariant, imageSrcSet, heroStageAnchor }; })";
   const React = { useState: () => [], useEffect: () => {}, useRef: () => ({}), Fragment: 0, createElement: () => ({}) };
   const location = { protocol: "https:", origin: "https://example.netlify.app" };
   return { factory: vm.runInNewContext(harness, { console }), React, location };
@@ -144,6 +144,15 @@ function makeModule(fetchImpl) {
   A(source.includes("imagePreviewFallback(e, album.cover)"), "optimized covers fall back to their original URL when needed");
   A(source.includes("compactAlbum ? \"repeat(auto-fit"), "small albums use a centered adaptive grid");
   A(source.includes("album.client && html"), "empty BU Owner metadata is hidden");
+
+  section("hero edge preview");
+  A(M.heroStageAnchor(0, 1) === 50, "a single cover remains centered");
+  A(M.heroStageAnchor(0, 5) === 34, "the first cover shifts left to reveal upcoming covers");
+  A(M.heroStageAnchor(0.5, 5) === 42, "the edge bias follows fractional touchpad movement");
+  A(M.heroStageAnchor(1, 5) === 50, "middle covers return to the stage center");
+  A(M.heroStageAnchor(4, 5) === 66, "the last cover shifts right to reveal previous covers");
+  A(source.includes("anchor + off * 28"), "hero cards share the edge-aware stage anchor");
+  A(source.includes("Math.min(0.72, 0.5"), "adjacent covers use a clear progressive fade");
 
   console.log(`\n${fail ? "❌" : "✅"} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
