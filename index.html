@@ -1087,7 +1087,7 @@
     const showStage = len > 0;
 
     return html`
-      <div style=${{ background: "#f4f4f4", minHeight: "100vh", color: "#262626", fontFamily: "'Quicksand','Mitr',sans-serif", WebkitFontSmoothing: "antialiased", overflowX: "hidden" }}>
+      <div style=${{ background: "#f4f4f4", minHeight: "100vh", color: "#262626", fontFamily: "'Quicksand','Mitr',sans-serif", WebkitFontSmoothing: "antialiased", overflowX: "clip" }}>
 
         ${/* ---- NON-FATAL WARNING (e.g. a playlist that failed to load) ---- */""}
         ${warn && html`<${WarnBar} text=${warn} />`}

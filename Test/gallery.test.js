@@ -138,6 +138,7 @@ function makeModule(fetchImpl) {
   const source = fs.readFileSync(findHtml(), "utf8");
   A((source.match(/aria-label="กรองผลงานตามหมวดหมู่"/g) || []).length === 1, "only one category filter navigation is rendered");
   A(source.includes('aria-pressed=${on ? "true" : "false"}'), "filter buttons expose their selected state");
+  A(source.includes('overflowX: "clip"'), "the page does not create an overflow ancestor that breaks sticky filters");
   A(source.includes("เนื้อหาบางรายการยังโหลดไม่ครบ"), "non-fatal errors use a concise user-facing notice");
   A(source.includes("imagePreviewFallback(e, album.cover)"), "optimized covers fall back to their original URL when needed");
   A(source.includes("compactAlbum ? \"repeat(auto-fit"), "small albums use a centered adaptive grid");
