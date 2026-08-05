@@ -140,6 +140,7 @@ function makeModule(fetchImpl) {
   A(source.includes('aria-pressed=${on ? "true" : "false"}'), "filter buttons expose their selected state");
   A(source.includes('overflowX: "clip"'), "the page does not create an overflow ancestor that breaks sticky filters");
   A(source.includes("เนื้อหาบางรายการยังโหลดไม่ครบ"), "non-fatal errors use a concise user-facing notice");
+  A(source.includes("setTimeout(() => setShow(false), 7000)"), "the non-fatal notice dismisses itself before blocking navigation");
   A(source.includes("imagePreviewFallback(e, album.cover)"), "optimized covers fall back to their original URL when needed");
   A(source.includes("compactAlbum ? \"repeat(auto-fit"), "small albums use a centered adaptive grid");
   A(source.includes("album.client && html"), "empty BU Owner metadata is hidden");

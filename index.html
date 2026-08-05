@@ -779,6 +779,8 @@
     useEffect(() => {
       setShow(true);
       console.warn("[gallery] some optional content could not be loaded:", text);
+      const timer = setTimeout(() => setShow(false), 7000);
+      return () => clearTimeout(timer);
     }, [text]);
     if (!show) return null;
     return html`<div role="status" aria-live="polite" style=${{ position: "fixed", top: "16px", right: "clamp(12px,2vw,24px)", zIndex: 90, width: "min(360px,calc(100vw - 24px))", background: "rgba(255,255,255,0.96)", border: "1px solid #e3e3e3", color: "#444", padding: "12px 12px 12px 14px", borderRadius: "12px", boxShadow: "0 16px 40px rgba(0,0,0,0.12)", fontSize: "12.5px", display: "flex", alignItems: "center", gap: "10px", lineHeight: 1.45, backdropFilter: "blur(10px)" }}>
