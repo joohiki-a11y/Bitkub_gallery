@@ -854,7 +854,9 @@
     // Give portrait and landscape covers a comparable visual footprint while
     // preserving every source pixel. This prevents wide photos from feeling
     // several times larger than portrait photos in the same carousel.
-    const targetWidth = Math.round(Math.sqrt(176000 * naturalRatio));
+    const areaWidth = Math.sqrt(176000 * naturalRatio);
+    const availableHeight = Math.min(480, Math.max(300, window.innerWidth * 0.42)) - 28;
+    const targetWidth = Math.round(Math.min(areaWidth, availableHeight * naturalRatio, window.innerWidth * 0.78, 580));
     const finishLoad = (e) => {
       const image = e.currentTarget;
       const unavailable = image.naturalWidth && image.naturalWidth <= 120;
