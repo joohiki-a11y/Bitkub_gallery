@@ -1,65 +1,55 @@
-# Design QA — UX round one
+# Design QA — Hero edge preview
 
 ## Comparison target
 
-- Source visual truth:
-  - `/workspace/scratch/a41de38878e4/upload/Screenshot 2569-08-05 at 18.25.18.png` — gallery grid before this round, 2047 × 1061 px.
-  - `/workspace/scratch/a41de38878e4/upload/Screenshot 2569-08-05 at 18.25.09.png` — Hero before this round, 2048 × 1180 px.
-  - Live pre-change capture from `https://joohiki-a11y.github.io/Bitkub_gallery/` showing the full-width technical playlist warning and duplicated filters.
-- Implementation: `https://joohiki-a11y.github.io/Bitkub_gallery/?qa=1fcd663` at commit `1fcd663da1a5ed18c4c43e3066df88d2fbd2106d`.
-- Browser-rendered implementation evidence: inline Cloud Browser captures of the deployed Hero, sticky gallery grid, Staygold album modal, and photo lightbox. The browser runtime did not expose workspace file paths for these screenshots.
+- Source visual truth: `/workspace/scratch/a41de38878e4/upload/01-Screenshot-2569-08-05-at-23.34.11.png`, 2048 × 896 px. The first cover is centered, leaving a large unused area on the left, and only one adjacent cover is clearly discoverable.
+- Implementation: `https://joohiki-a11y.github.io/Bitkub_gallery/?qa=hero-fa52f293` at commit `fa52f293d2a6b7c895c4134ca9bf063c3cf8d916`.
+- Browser-rendered implementation screenshot: inline Cloud Browser capture from the implementation URL. The browser runtime did not expose a workspace path for the PNG.
 - Browser viewport: 1363 × 936 CSS px, device pixel ratio 1.
-- State: desktop, All filter, grid scrolled with the filter pinned at the top, Staygold album open, and first Staygold photo open in the lightbox.
-- Density normalization: source and implementation were captured at different responsive desktop widths, so comparison used component proportions, spacing rhythm, content visibility, image fidelity, and interaction state rather than pixel-for-pixel coordinates.
+- State: desktop, All filter, first Hero work (`Noong Doi`) selected.
+- Density normalization: the source and implementation have different desktop widths. The comparison used normalized stage proportions, visible-card count, fade progression, image fidelity, spacing rhythm, and the same first-slide state rather than pixel-for-pixel coordinates.
 
 ## Full-view comparison evidence
 
-- The two separate category-filter systems were replaced by one pill-based navigation placed before the Hero and kept sticky while the gallery is browsed.
-- The previous full-width technical playlist error no longer changes page height or dominates the first impression. It is now a concise floating notice that dismisses itself after seven seconds.
-- The existing masonry rhythm, card radii, brand green, typography, natural image proportions, and lightbox presentation remain consistent with the source.
-- At the scrolled gallery state, the filter measured `top: 0` and `height: 64px`; all 42 cards remained available.
+- Source and implementation were opened together in one comparison input before this report was written.
+- The active first cover moved from the 50% stage center to the edge-aware 34% anchor, reducing the unused left region while preserving comfortable outer padding.
+- Two upcoming covers are now visible in the opening frame. The nearest preview uses a 0.50 neutral wash and the second preview uses a 0.68 wash, forming a clear progressive affordance for horizontal navigation.
+- Existing typography, category navigation, title/meta hierarchy, original image proportions, radii, shadows, and brand colors remain unchanged.
 
 ## Focused comparison evidence
 
-- Staygold modal: three media cards measured equal width and the media row had matching 152 px left/right gaps. Empty `BU Owner`, subtitle, description, and year fields were not rendered.
-- Modal previews used responsive Cloudinary variants. Each Staygold preview rendered at 260 × 390 px instead of downloading the 6336 × 9504 px original.
-- Lightbox kept the original full-resolution source (6336 × 9504 px), retained the 1 / 3 counter, navigation buttons, thumbnail strip, and original aspect ratio.
-- The filter selected state was exposed through `aria-pressed`; Merchandise produced 2 cards and All restored 42 cards.
+- At 1363 px viewport width, the first card measured x 200–716 px with center x 458 px; the stage center was x 674 px. The second card measured x 619–1052 px and the third x 1110–1317 px.
+- Selecting the next work changed the title to `Awards` and returned its card center to x 674 px, exactly matching the stage center. Returning to the first work restored the edge-biased layout.
+- A separate close-up was not required because the requested change concerns full-stage composition and the full-view capture makes all cards, fades, labels, and controls readable.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: passed. Quicksand/Mitr families, display hierarchy, card titles, and small labels remain aligned with the existing design. Green metadata moved to the darker existing `#007339` token for better readability.
-- Spacing and layout rhythm: passed. The single 64 px sticky filter is stable, masonry remains packed, and one-to-three-item albums are centered instead of leaving a large empty right side.
-- Colors and visual tokens: passed. Existing neutral surfaces, borders, shadows, radii, and Bitkub green remain intact; no new visual language was introduced.
-- Image quality and asset fidelity: passed. Original Cloudinary assets are retained. Hero, grid, and modal previews use responsive transformations; the lightbox still loads the source original.
-- Copy and content: passed. The technical API response was replaced with concise user-facing copy, while the full diagnostic remains available in the console.
-- Icons: unchanged from the existing implementation.
-- Accessibility and interaction: filter state, keyboard controls, focus behavior, dialog controls, touchpad behavior, reduced motion, and natural image alternatives remain in place. No claim of full WCAG compliance is made.
+- Fonts and typography: passed. Quicksand/Mitr hierarchy, weights, line heights, and small metadata remain consistent with the existing design.
+- Spacing and layout rhythm: passed. The opening frame is denser without crowding; the first cover retains a 200 px outer margin at the tested viewport and the preview sequence remains evenly spaced.
+- Colors and visual tokens: passed. The progressive fade uses the existing neutral `#f7f7f7` overlay; no new color language was introduced.
+- Image quality and asset fidelity: passed. Original gallery assets, crops, aspect ratios, responsive Cloudinary previews, radii, and shadows are preserved.
+- Copy and content: passed. No visible copy changed; the selected title and metadata continue to track the active work.
+- Accessibility and interaction: passed for this scope. The Hero remains a labelled carousel, adjacent cards remain keyboard-addressable, arrow navigation works, and fractional touchpad movement shares the same smoothly interpolated anchor.
 
 ## Interaction and runtime checks
 
-- `node Test/gallery.test.js`: 36 passed, 0 failed.
+- `node Test/gallery.test.js`: 43 passed, 0 failed.
 - `git diff --check`: passed.
-- Vite production build: passed.
-- Merchandise filter: 2 cards; All filter: 42 cards.
-- Sticky navigation: remained at the top while the grid was scrolled.
-- Non-fatal notice: disappeared automatically after seven seconds.
-- Staygold modal: opened with three centered previews and no empty BU Owner row.
-- Lightbox: opened the original full-resolution image with correct counter and controls.
-- Console checked: no new gallery layout or interaction errors. The known YouTube Data API HTTP-referrer restriction still logs playlist-fetch errors; the round-one UI now handles those errors without breaking or shifting the gallery. Browser-extension metadata errors are unrelated to the site.
+- First-slide edge anchor: 34%; single-item filter fallback: 50%; final-slide mirror anchor: 66%.
+- Next arrow: `Noong Doi` → `Awards`; active card centered after transition.
+- Previous arrow: `Awards` → `Noong Doi`; edge preview restored.
+- Console checked: no new Hero layout or interaction errors. The existing YouTube Data API HTTP-referrer restriction still logs playlist-fetch errors; browser-extension metadata errors are unrelated to the site.
 
 ## Comparison history
 
-1. Initial implementation delivered the single filter, compact warning, responsive images, and centered small albums.
-2. First deployed inspection found the filter did not stay pinned because the app root used `overflow-x: hidden` (P1).
-3. Fix: changed the root to `overflow-x: clip`, preserving horizontal containment without creating a sticky-positioning ancestor. Post-fix measurement confirmed the filter at `top: 0` while scrolling.
-4. The temporary notice could overlap the filter during rapid scrolling (P2).
-5. Fix: the notice now auto-dismisses after seven seconds while preserving a manual close action and console diagnostics.
-6. Final deployed inspection found no remaining actionable P0/P1/P2 issue in the requested desktop round-one scope.
+1. Initial source showed the active first card centered, a large empty left area, and one subdued adjacent preview.
+2. Fix: introduced an edge-aware stage anchor that shifts only the first/last positions and interpolates with fractional touchpad movement.
+3. Fix: increased and progressively stepped the neutral wash on upcoming covers so the scroll affordance is visible without competing with the active work.
+4. Post-fix browser evidence confirmed two upcoming covers in the first frame, exact center alignment from the second work onward, and no actionable P0/P1/P2 regression.
 
 ## Follow-up polish
 
-- P3: recheck the consolidated filter on a physical narrow mobile device; the implementation uses horizontal overflow and 38 px-high pills, but this pass could not resize the connected browser viewport.
-- External configuration: update the YouTube Data API key HTTP-referrer allowlist for `https://joohiki-a11y.github.io/*` so playlist content can load instead of using the graceful fallback notice.
+- P3: verify the perceived preview fade on a physical wide-gamut display; opacity can be tuned without changing the layout behavior.
+- External configuration: update the YouTube Data API key HTTP-referrer allowlist for `https://joohiki-a11y.github.io/*` to remove the existing playlist warning.
 
 final result: passed
