@@ -37,7 +37,8 @@ function loadModule() {
     "(function(React,ReactDOM,htm,window,document,location,fetch,AbortController,setTimeout,clearTimeout){" +
     inner +
     " return { parseVideo, videoItem, videoEmbed, videoThumb, buildAlbums, gvizToObjects, " +
-    "buildTabs, expandPlaylists, enrichThumbs, flattenSpread, ytId, playlistId, splitList }; })";
+    "buildTabs, expandPlaylists, enrichThumbs, flattenSpread, ytId, playlistId, splitList, " +
+    "imageVariant, imageSrcSet }; })";
   const React = { useState: () => [], useEffect: () => {}, useRef: () => ({}), Fragment: 0, createElement: () => ({}) };
   const location = { protocol: "https:", origin: "https://example.netlify.app" };
   return { factory: vm.runInNewContext(harness, { console }), React, location };
@@ -79,6 +80,10 @@ function makeModule(fetchImpl) {
   section("thumbnails");
   A(M.videoThumb(M.videoItem("https://youtu.be/abc123DEF_x"), "maxresdefault").includes("abc123DEF_x/maxresdefault"), "youtube thumb");
   A(M.videoThumb(M.videoItem("https://www.tiktok.com/@u/video/7411111111111111111"), "maxresdefault") === "", "tiktok has no direct thumb");
+  const cloudinary = "https://res.cloudinary.com/demo/image/upload/v1/sample.jpg";
+  A(M.imageVariant(cloudinary, 720).includes("/f_auto,q_auto:good,c_limit,w_720/"), "cloudinary previews are resized and compressed");
+  A(M.imageVariant("https://example.com/photo.jpg", 720) === "https://example.com/photo.jpg", "non-cloudinary URLs are unchanged");
+  A(M.imageSrcSet(cloudinary, [420, 720]).includes("420w") && M.imageSrcSet(cloudinary, [420, 720]).includes("720w"), "responsive Cloudinary srcset is generated");
 
   section("buildAlbums: inline photos/videos, category, cover");
   const at = { cols: [{ label: "album_id" }, { label: "category" }, { label: "title" }, { label: "bu_owner" }, { label: "photos" }, { label: "videos" }],
@@ -101,7 +106,7 @@ function makeModule(fetchImpl) {
   section("album_id dedupe");
   const dup = M.buildAlbums(M.gvizToObjects({ cols: [{ label: "album_id" }, { label: "photos" }],
     rows: [{ c: [{ v: "d" }, { v: "https://img/1.jpg" }] }, { c: [{ v: "d" }, { v: "https://img/2.jpg" }] }] }), []);
-  A(new Set(dup.map((a) => a.id)).size === 2 && dup[1].id === "d-2", "duplicate album_id suffixed to d-2");
+  A(dup.length === 1 && dup[0].cover === "https://img/1.jpg", "duplicate album_id keeps the first row only");
 
   section("spread: one card per media item");
   const sp = M.buildAlbums(M.gvizToObjects({ cols: [{ label: "album_id" }, { label: "category" }, { label: "title" }, { label: "videos" }, { label: "spread" }],
@@ -128,6 +133,15 @@ function makeModule(fetchImpl) {
     rows: [{ c: [{ v: "t" }, { v: "tk" }, { v: "https://www.tiktok.com/@u/video/7411111111111111111" }] }] }), []);
   await M3.enrichThumbs(ta);
   A(ta[0].cover === "https://tk/thumb.jpg", "tiktok cover filled from oEmbed");
+
+  section("UX round one safeguards");
+  const source = fs.readFileSync(findHtml(), "utf8");
+  A((source.match(/aria-label="กรองผลงานตามหมวดหมู่"/g) || []).length === 1, "only one category filter navigation is rendered");
+  A(source.includes('aria-pressed=${on ? "true" : "false"}'), "filter buttons expose their selected state");
+  A(source.includes("เนื้อหาบางรายการยังโหลดไม่ครบ"), "non-fatal errors use a concise user-facing notice");
+  A(source.includes("imagePreviewFallback(e, album.cover)"), "optimized covers fall back to their original URL when needed");
+  A(source.includes("compactAlbum ? \"repeat(auto-fit"), "small albums use a centered adaptive grid");
+  A(source.includes("album.client && html"), "empty BU Owner metadata is hidden");
 
   console.log(`\n${fail ? "❌" : "✅"} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

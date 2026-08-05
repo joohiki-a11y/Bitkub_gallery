@@ -27,6 +27,11 @@
   @keyframes merPop   { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
   /* Hide native scrollbar on the sticky tab strip (matches prototype scrollbar-width:none) */
   .mer-noscroll::-webkit-scrollbar { display: none; }
+  .mer-filter-strip { scroll-padding-inline: 8px; }
+  .mer-filter-strip button:focus-visible {
+    outline: 2px solid #02D767;
+    outline-offset: 2px;
+  }
   /* Visible keyboard focus for the coverflow cards (replaces outline:none). */
   .mer-cf:focus-visible { outline: 2px solid #02D767; outline-offset: 3px; }
   /* Isolate each masonry card without faking an off-screen height. */
@@ -159,6 +164,30 @@
 
   function isWebUrl(s) {
     return /^https?:\/\//i.test((s || "").trim());
+  }
+
+  // Cloudinary can resize and compress gallery previews at the edge. Keep the
+  // original URL for the lightbox, but avoid downloading multi-megapixel files
+  // for cards that are only a few hundred CSS pixels wide.
+  function imageVariant(url, width) {
+    const source = (url || "").trim();
+    if (!/^https:\/\/res\.cloudinary\.com\//i.test(source) || !source.includes("/image/upload/")) return source;
+    const safeWidth = Math.max(160, Math.min(2000, Math.round(Number(width) || 800)));
+    return source.replace("/image/upload/", `/image/upload/f_auto,q_auto:good,c_limit,w_${safeWidth}/`);
+  }
+
+  function imageSrcSet(url, widths) {
+    if (!/^https:\/\/res\.cloudinary\.com\//i.test((url || "").trim())) return "";
+    return widths.map((width) => `${imageVariant(url, width)} ${width}w`).join(", ");
+  }
+
+  function imagePreviewFallback(e, original) {
+    const image = e.currentTarget;
+    if (!image || image.dataset.originalFallback === "true" || imageVariant(original, 800) === original) return false;
+    image.dataset.originalFallback = "true";
+    image.removeAttribute("srcset");
+    image.src = original;
+    return true;
   }
 
   // Split a comma/newline-separated cell into a trimmed, non-empty list.
@@ -747,11 +776,14 @@
   /* ---- Dismissible top warning bar (non-fatal, e.g. a playlist error) ------ */
   function WarnBar({ text }) {
     const [show, setShow] = useState(true);
-    useEffect(() => setShow(true), [text]);
+    useEffect(() => {
+      setShow(true);
+      console.warn("[gallery] some optional content could not be loaded:", text);
+    }, [text]);
     if (!show) return null;
-    return html`<div role="status" aria-live="polite" style=${{ background: "#fff4e5", borderBottom: "1px solid #ffd8a8", color: "#8a5a00", padding: "11px clamp(20px,5vw,64px)", fontSize: "13px", display: "flex", alignItems: "center", gap: "12px", justifyContent: "center", flexWrap: "wrap", lineHeight: 1.5 }}>
-      <span style=${{ maxWidth: "820px", wordBreak: "break-word" }}>⚠️ ${text}</span>
-      <button onClick=${() => setShow(false)} style=${{ background: "none", border: "1px solid #e6c07a", color: "#8a5a00", borderRadius: "6px", padding: "3px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: "12.5px", flex: "none" }}>ปิด</button>
+    return html`<div role="status" aria-live="polite" style=${{ position: "fixed", top: "16px", right: "clamp(12px,2vw,24px)", zIndex: 90, width: "min(360px,calc(100vw - 24px))", background: "rgba(255,255,255,0.96)", border: "1px solid #e3e3e3", color: "#444", padding: "12px 12px 12px 14px", borderRadius: "12px", boxShadow: "0 16px 40px rgba(0,0,0,0.12)", fontSize: "12.5px", display: "flex", alignItems: "center", gap: "10px", lineHeight: 1.45, backdropFilter: "blur(10px)" }}>
+      <span style=${{ flex: 1 }}>เนื้อหาบางรายการยังโหลดไม่ครบ แต่ผลงานส่วนอื่นยังเปิดดูได้ตามปกติ</span>
+      <button onClick=${() => setShow(false)} aria-label="ปิดการแจ้งเตือน" style=${{ minWidth: "46px", minHeight: "34px", background: "#f4f4f4", border: "1px solid #e5e5e5", color: "#555", borderRadius: "8px", padding: "5px 10px", cursor: "pointer", fontFamily: "inherit", fontSize: "12px", flex: "none" }}>ปิด</button>
     </div>`;
   }
 
@@ -857,6 +889,8 @@
     const areaWidth = Math.sqrt(176000 * naturalRatio);
     const availableHeight = Math.min(480, Math.max(300, window.innerWidth * 0.42)) - 28;
     const targetWidth = Math.round(Math.min(areaWidth, availableHeight * naturalRatio, window.innerWidth * 0.78, 580));
+    const coverPreview = imageVariant(album.cover, 1000);
+    const coverSrcSet = imageSrcSet(album.cover, [480, 800, 1200]);
     const finishLoad = (e) => {
       const image = e.currentTarget;
       const unavailable = image.naturalWidth && image.naturalWidth <= 120;
@@ -868,6 +902,7 @@
       else if (image.style.display === "none") { setFailed(true); setLoaded(true); }
     };
     const failLoad = (e) => {
+      if (imagePreviewFallback(e, album.cover)) return;
       coverStepDown(e);
       if (e.currentTarget.style.display === "none") { setFailed(true); setLoaded(true); }
     };
@@ -884,7 +919,7 @@
           border: "1px solid rgba(0,0,0,0.06)", transition: active ? "none" : "transform 0.42s cubic-bezier(0.2,0.8,0.2,1), opacity 0.28s, box-shadow 0.28s",
           cursor: "pointer", pointerEvents: abs >= 2.75 ? "none" : "auto", willChange: "transform, opacity", backfaceVisibility: "hidden" }}>
         ${album.cover && !failed
-          ? html`<img src=${album.cover} alt="" loading=${isCenter ? "eager" : "lazy"} decoding="async" onError=${failLoad} onLoad=${finishLoad}
+          ? html`<img src=${coverPreview} srcSet=${coverSrcSet || undefined} sizes="(max-width: 640px) 78vw, 580px" alt="" loading=${isCenter ? "eager" : "lazy"} decoding="async" onError=${failLoad} onLoad=${finishLoad}
               style=${{ position: naturalSize ? "relative" : "absolute", inset: naturalSize ? undefined : 0, width: naturalSize ? `${targetWidth}px` : "100%", height: naturalSize ? "auto" : "100%", maxWidth: "min(78vw,580px)", maxHeight: maxImageHeight, objectFit: "contain", display: "block", opacity: loaded ? 1 : 0 }} />`
           : html`<${CoverTile} platform=${album.media[0] && album.media[0].platform} />`}
         <div style=${{ position: "absolute", inset: 0, pointerEvents: "none", transition: "background 0.5s",
@@ -1061,17 +1096,24 @@
         <header style=${{ textAlign: "center", padding: "clamp(40px,7vh,84px) clamp(20px,5vw,64px) clamp(14px,2vh,26px)", display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div style=${{ marginBottom: "26px" }}><${Lockup} logoHeight="38px" fontSize="clamp(20px,2.6vw,28px)" /></div>
           <h1 style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 600, fontSize: "clamp(38px,6vw,76px)", lineHeight: 1.02, margin: 0, letterSpacing: "-0.02em", color: "#1a1a1a" }}>Production Gallery</h1>
+        </header>
 
-          <div style=${{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "9px", margin: "34px auto 0", maxWidth: "780px" }}>
+        ${/* ---- SINGLE STICKY FILTER (visible before Hero and while browsing) */""}
+        <nav aria-label="กรองผลงานตามหมวดหมู่" style=${{ position: "sticky", top: 0, zIndex: 30, background: "rgba(244,244,244,0.96)", borderTop: "1px solid #e6e6e6", borderBottom: "1px solid #e6e6e6", display: "flex", alignItems: "center", gap: "clamp(12px,2vw,24px)", padding: "10px clamp(16px,5vw,64px)", backdropFilter: "blur(12px)" }}>
+          <div style=${{ display: "flex", alignItems: "baseline", gap: "9px", flex: "none" }}>
+            <span style=${{ fontSize: "12px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#666", fontWeight: 600 }}>Albums</span>
+            <span aria-live="polite" style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 700, fontSize: "16px", color: "#007339" }}>${len}</span>
+          </div>
+          <div class="mer-noscroll mer-filter-strip" style=${{ display: "flex", gap: "7px", overflowX: "auto", flex: 1, justifyContent: "flex-start", scrollbarWidth: "none", overscrollBehaviorX: "contain", WebkitOverflowScrolling: "touch", padding: "2px" }}>
             ${tabs.map(({ key, label }) => {
               const on = key === active;
-              return html`<button key=${key} onClick=${() => selectTab(key)}
-                style=${{ flex: "none", cursor: "pointer", fontFamily: "'Quicksand','Mitr',sans-serif", fontSize: "13.5px", padding: "9px 18px", borderRadius: "999px",
-                  fontWeight: on ? 600 : 500, border: on ? `1px solid ${GREEN}` : "1px solid #e2e2e2", background: on ? GREEN : "#ffffff", color: on ? "#063d22" : "#6a6a6a",
-                  transition: "background 0.25s, color 0.25s, border-color 0.25s" }}>${label}</button>`;
+              return html`<button key=${key} onClick=${() => selectTab(key)} aria-pressed=${on ? "true" : "false"}
+                style=${{ flex: "none", cursor: "pointer", fontFamily: "'Quicksand','Mitr',sans-serif", fontSize: "13px", padding: "8px 15px", minHeight: "38px", borderRadius: "999px",
+                  fontWeight: on ? 600 : 500, border: on ? `1px solid ${GREEN}` : "1px solid #dfdfdf", background: on ? GREEN : "#ffffff", color: on ? "#063d22" : "#5f5f5f",
+                  transition: "background 0.2s, color 0.2s, border-color 0.2s" }}>${label}</button>`;
             })}
           </div>
-        </header>
+        </nav>
 
         ${/* ---- COVERFLOW ---- */""}
         ${showStage && html`
@@ -1092,7 +1134,7 @@
 
             <div style=${{ textAlign: "center", margin: "clamp(12px,2vh,20px) auto clamp(4px,1vh,8px)", minHeight: "46px", padding: "0 20px" }}>
               <div data-testid="hero-title" style=${{ fontWeight: 500, fontSize: "clamp(17px,2vw,21px)", color: "#1f1f1f" }}>${activeTitle}</div>
-              <div style=${{ fontSize: "12.5px", color: "#00BF61", fontWeight: 600, letterSpacing: "0.03em", marginTop: "3px" }}>${activeMeta}</div>
+              <div style=${{ fontSize: "12.5px", color: "#007339", fontWeight: 600, letterSpacing: "0.03em", marginTop: "3px" }}>${activeMeta}</div>
             </div>
 
             <div style=${{ display: "flex", justifyContent: "center", gap: "14px", marginBottom: "clamp(18px,3vh,36px)" }}>
@@ -1100,24 +1142,6 @@
                 <${ArrowBtn} key=${arrow} label=${arrow} ariaLabel=${k === 0 ? "ก่อนหน้า" : "ถัดไป"} onClick=${() => step(k === 0 ? -1 : 1)} />`)}
             </div>
           <//>`}
-
-        ${/* ---- STICKY FILTER ---- */""}
-        <nav style=${{ position: "sticky", top: 0, zIndex: 30, background: "rgba(244,244,244,0.98)", borderTop: "1px solid #e6e6e6", borderBottom: "1px solid #e6e6e6", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "24px", padding: "15px clamp(20px,5vw,64px)" }}>
-          <div style=${{ display: "flex", alignItems: "baseline", gap: "12px", flex: "none" }}>
-            <span style=${{ fontSize: "12px", letterSpacing: "0.16em", textTransform: "uppercase", color: "#9a9a9a", fontWeight: 600 }}>Albums</span>
-            <span style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 700, fontSize: "16px", color: "#007339" }}>${len}</span>
-          </div>
-          <div class="mer-noscroll" style=${{ display: "flex", gap: "4px", overflowX: "auto", flex: 1, justifyContent: "flex-end", scrollbarWidth: "none" }}>
-            ${tabs.map(({ key, label }) => {
-              const on = key === active;
-              return html`<button key=${key} onClick=${() => selectTab(key)}
-                style=${{ flex: "none", background: "none", border: "none", cursor: "pointer", fontFamily: "'Quicksand','Mitr',sans-serif", fontWeight: 500, fontSize: "13.5px", padding: "8px 14px", color: on ? "#1a1a1a" : "#9a9a9a", borderRadius: "6px" }}>
-                ${label}
-                ${on && html`<div style=${{ height: "2px", background: GREEN, marginTop: "6px", borderRadius: "2px" }}></div>`}
-              </button>`;
-            })}
-          </div>
-        </nav>
 
         ${/* ---- ALBUM GRID ---- */""}
         <main data-testid="album-grid" style=${{ padding: "clamp(28px,4vw,56px) clamp(20px,5vw,64px) clamp(60px,10vh,120px)", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(clamp(260px,30vw,340px),1fr))", gridAutoRows: "8px", gridAutoFlow: "row dense", columnGap: "clamp(18px,2vw,30px)", rowGap: "clamp(18px,2vw,30px)", alignItems: "start" }}>
@@ -1156,6 +1180,8 @@
     const cardRef = useRef(null);
     const active = hover || focus;
     const catLabel = album.category;
+    const coverPreview = imageVariant(album.cover, 720);
+    const coverSrcSet = imageSrcSet(album.cover, [420, 720, 960]);
     useEffect(() => {
       const card = cardRef.current;
       if (!card || !card.parentElement || typeof ResizeObserver === "undefined") return;
@@ -1192,8 +1218,8 @@
           outline: focus ? `2px solid ${GREEN}` : "none", outlineOffset: focus ? "2px" : undefined }}>
         <div style=${{ position: "relative", aspectRatio: ratio, overflow: "hidden", background: loaded ? "#ececec" : "linear-gradient(100deg,#ececec 30%,#f3f3f3 50%,#ececec 70%)", backgroundSize: "200% 100%", animation: loaded ? "none" : "merShimmer 1.4s ease-in-out infinite" }}>
           ${album.cover
-            ? html`<img src=${album.cover} alt="" loading="lazy" decoding="async"
-                onError=${(e) => { coverStepDown(e); setLoaded(true); }}
+            ? html`<img src=${coverPreview} srcSet=${coverSrcSet || undefined} sizes="(max-width: 720px) 90vw, (max-width: 1200px) 45vw, 340px" alt="" loading="lazy" decoding="async"
+                onError=${(e) => { if (!imagePreviewFallback(e, album.cover)) { coverStepDown(e); setLoaded(true); } }}
                 onLoad=${loadCover}
                 style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", display: "block", transition: "transform 0.8s cubic-bezier(0.2,0.8,0.2,1)", transform: hover ? "scale(1.03)" : "none" }} />`
             : html`<${CoverTile} platform=${album.media[0] && album.media[0].platform} />`}
@@ -1223,7 +1249,9 @@
     // The album view must reflect the original photo's proportions. A separate
     // thumbnail may already be square/landscape-cropped, so using it here would
     // make naturalWidth/naturalHeight report the crop rather than the photo.
-    const thumb = isVideo ? videoThumb(item, "hqdefault") : (item.full || item.src || item.thumbnail);
+    const originalThumb = isVideo ? videoThumb(item, "hqdefault") : (item.full || item.src || item.thumbnail);
+    const thumb = isVideo ? originalThumb : imageVariant(originalThumb, 720);
+    const thumbSrcSet = isVideo ? "" : imageSrcSet(originalThumb, [360, 600, 900]);
     return html`
       <div data-testid="media-thumb" role="button" tabindex="0" aria-label=${item.label || (item.type === "video" ? "เล่นวิดีโอ" : "ดูรูป")}
         onClick=${onOpen}
@@ -1234,9 +1262,9 @@
           transition: "transform 0.25s ease, box-shadow 0.25s ease", transform: hover ? "translateY(-3px)" : "none", boxShadow: hover ? "0 14px 30px rgba(0,0,0,0.14)" : "none",
           outline: focus ? `2px solid ${GREEN}` : "none", outlineOffset: focus ? "2px" : undefined }}>
         ${thumb
-          ? html`<img src=${thumb} alt="" loading="lazy" decoding="async"
+          ? html`<img src=${thumb} srcSet=${thumbSrcSet || undefined} sizes="(max-width: 640px) 82vw, 260px" alt="" loading="lazy" decoding="async"
               onLoad=${(e) => { const image = e.currentTarget; if (!isVideo && image.naturalWidth && image.naturalHeight) setRatio(`${image.naturalWidth} / ${image.naturalHeight}`); setLoaded(true); }}
-              onError=${(e) => { setLoaded(true); e.currentTarget.style.display = "none"; }}
+              onError=${(e) => { if (!imagePreviewFallback(e, originalThumb)) { setLoaded(true); e.currentTarget.style.display = "none"; } }}
               style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", display: "block" }} />`
           : html`<${CoverTile} platform=${item.platform} />`}
         ${isVideo && html`
@@ -1254,6 +1282,8 @@
     const [closeHover, setCloseHover] = useState(false);
     const s = mediaSummary(album.media);
     const dlg = useDialog();
+    const detailMeta = [album.category, s.breakdown, album.year].filter(Boolean).join(" · ");
+    const compactAlbum = album.media.length <= 3;
     return html`
       <div onClick=${onClose} style=${{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(26,26,26,0.55)", backdropFilter: "blur(7px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "clamp(12px,3vw,48px)", animation: "merFade 0.3s ease", overflowY: "auto" }}>
         <div ref=${dlg} role="dialog" aria-modal="true" aria-label=${album.title} tabindex="-1" onClick=${onStop} style=${{ position: "relative", width: "100%", maxWidth: "1120px", background: "#ffffff", borderRadius: "18px", overflow: "hidden", boxShadow: "0 40px 100px rgba(0,0,0,0.4)", animation: "merRise 0.4s cubic-bezier(0.2,0.8,0.2,1) both", margin: "auto", outline: "none" }}>
@@ -1261,18 +1291,18 @@
           <button onClick=${onClose} aria-label="ปิด" onMouseEnter=${() => setCloseHover(true)} onMouseLeave=${() => setCloseHover(false)}
             style=${{ position: "absolute", top: "18px", right: "18px", zIndex: 5, width: "38px", height: "38px", borderRadius: "50%", background: closeHover ? GREEN : "rgba(255,255,255,0.92)", backdropFilter: "blur(6px)", border: `1px solid ${closeHover ? GREEN : "#e2e2e2"}`, color: closeHover ? "#fff" : "#404040", fontSize: "17px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, transition: "all 0.2s" }}>✕</button>
 
-          <div style=${{ padding: "clamp(26px,3.4vw,46px) clamp(24px,3.4vw,46px) clamp(20px,2.6vw,30px)", borderBottom: "1px solid #ececec" }}>
-            <div style=${{ fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#00BF61", fontWeight: 600, marginBottom: "14px" }}>${album.category}${s.breakdown ? ` · ${s.breakdown}` : ""} · ${album.year}</div>
+          <div style=${{ padding: "clamp(24px,3vw,40px) clamp(24px,3.4vw,46px) clamp(20px,2.6vw,28px)", borderBottom: "1px solid #ececec" }}>
+            <div style=${{ fontSize: "11px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#007339", fontWeight: 600, marginBottom: "11px" }}>${detailMeta}</div>
             <h2 style=${{ fontWeight: 500, fontSize: "clamp(26px,3.4vw,40px)", lineHeight: 1.18, margin: 0, color: "#1a1a1a" }}>${album.title}</h2>
-            <div style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 500, fontSize: "16px", color: "#9a9a9a", marginTop: "5px" }}>${album.titleEn}</div>
-            <p style=${{ fontWeight: 300, fontSize: "15.5px", lineHeight: 1.72, color: "#555", margin: "18px 0 0", maxWidth: "720px", textWrap: "pretty" }}>${album.desc}</p>
-            <div style=${{ display: "flex", alignItems: "center", gap: "10px", marginTop: "20px" }}>
+            ${album.titleEn && html`<div style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 500, fontSize: "16px", color: "#666", marginTop: "5px" }}>${album.titleEn}</div>`}
+            ${album.desc && html`<p style=${{ fontWeight: 300, fontSize: "15.5px", lineHeight: 1.72, color: "#555", margin: "18px 0 0", maxWidth: "720px", textWrap: "pretty" }}>${album.desc}</p>`}
+            ${album.client && html`<div style=${{ display: "flex", alignItems: "center", gap: "10px", marginTop: "20px" }}>
               <span style=${{ fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", color: "#a8a8a8", fontWeight: 600 }}>BU Owner</span>
               <span style=${{ fontSize: "14px", fontWeight: 500, color: "#404040" }}>${album.client}</span>
-            </div>
+            </div>`}
           </div>
 
-          <div style=${{ padding: "clamp(22px,2.6vw,34px) clamp(24px,3.4vw,46px) clamp(28px,3.4vw,46px)", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(clamp(150px,18vw,210px),1fr))", gap: "clamp(12px,1.4vw,18px)" }}>
+          <div style=${{ padding: "clamp(22px,2.6vw,34px) clamp(24px,3.4vw,46px) clamp(28px,3.4vw,46px)", display: "grid", gridTemplateColumns: compactAlbum ? "repeat(auto-fit,minmax(min(100%,190px),260px))" : "repeat(auto-fill,minmax(clamp(150px,18vw,210px),1fr))", justifyContent: compactAlbum ? "center" : "start", gap: "clamp(12px,1.4vw,18px)" }}>
             ${album.media.map((m, i) => html`<${MediaThumb} key=${i} item=${m} onOpen=${() => onOpenMedia(i)} />`)}
           </div>
         </div>
@@ -1358,7 +1388,7 @@
             <div data-testid="media-strip" class="mer-noscroll" aria-label="เลือกรูปหรือวิดีโอ" style=${{ width: "100%", display: "flex", justifyContent: "safe center", gap: "8px", overflowX: "auto", scrollbarWidth: "none", padding: "2px 4px" }}>
               ${album.media.map((item, itemIndex) => {
                 const current = itemIndex === index;
-                const thumb = item.type === "video" ? videoThumb(item, "hqdefault") : (item.thumbnail || item.src);
+                const thumb = item.type === "video" ? videoThumb(item, "hqdefault") : imageVariant(item.thumbnail || item.src, 180);
                 return html`<button key=${itemIndex} onClick=${(e) => { e.stopPropagation(); onSelect(itemIndex); }} aria-label=${`ดูรายการ ${itemIndex + 1}`}
                   aria-current=${current ? "true" : undefined}
                   style=${{ position: "relative", flex: "0 0 auto", width: "58px", height: "40px", padding: 0, overflow: "hidden", borderRadius: "7px", border: current ? `2px solid ${GREEN}` : "1px solid rgba(255,255,255,0.25)", background: "#222", cursor: "pointer", opacity: current ? 1 : 0.64, transition: "opacity 0.2s,border-color 0.2s" }}>
