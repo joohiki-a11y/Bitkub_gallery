@@ -74,7 +74,7 @@
    *    - Two tabs joined by album_id:
    *
    *      Tab "Albums": album_id | category | title | title_en | client | year | cover | desc | photos | videos
-   *      Tab "Media" : album_id | order | type | mtype | label | src | yt_id   (optional)
+   *      Tab "Media" : album_id | order | type | mtype | label | src | thumbnail | full | alt | yt_id   (optional)
    *
    *        category = ANY text you choose (e.g. Photo, Video, Podcast, รายการ
    *          YouTube). Each distinct value becomes its own filter tab, labelled
@@ -101,6 +101,8 @@
    *        B) One row per item in the Media tab (fine control: label, order, mtype):
    *           type ∈ { photo, video }; mtype ∈ { photo, video, youtube, short, highlight };
    *           photo rows use `src` (direct image URL), video rows use `yt_id`.
+   *           Optional `thumbnail` + `full` keep grid images light while the
+   *           lightbox loads the full-size file; `alt` describes the photo.
    *           A video work may also include photo rows (behind-the-scenes).
    * ========================================================================== */
   const CONFIG = {
@@ -110,6 +112,12 @@
     // YouTube Data API v3 key — only needed for the `playlist` column (expanding
     // a playlist into individual video cards). Restrict it by HTTP referrer.
     YT_API_KEY: "AIzaSyCZcWsZvfs5EApHYf2Vsu-mW4vGc8wVjGI",
+    GESTURE: {
+      HERO_PIXELS_PER_ITEM: 220,
+      LIGHTBOX_PIXELS_PER_ITEM: 72,
+      TOUCH_SWIPE_THRESHOLD: 56,
+      SNAP_DELAY_MS: 90,
+    },
   };
 
   const GREEN = "#02D767";
@@ -357,8 +365,15 @@
               const item = videoItem(m.yt_id || m.url || m.src || "", mtype, m.label || "");
               return item.vid || item.vurl ? item : null;
             }
-            if (type === "photo" && isWebUrl(m.src)) {
-              return { type: "photo", mtype, label: m.label || "", src: m.src, full: m.src };
+            if (type === "photo") {
+              const full = [m.full, m.src].find(isWebUrl) || "";
+              const thumbnail = [m.thumbnail, m.thumb, m.src, full].find(isWebUrl) || "";
+              if (full || thumbnail) {
+                return {
+                  type: "photo", mtype, label: m.label || "", alt: m.alt || m.label || "",
+                  src: thumbnail || full, thumbnail: thumbnail || full, full: full || thumbnail,
+                };
+              }
             }
             return null;
           })
@@ -366,7 +381,7 @@
         // 2) Inline photos straight from the Albums row — a photos-only album
         //    needs NO Media rows: just paste image URLs into the `photos` cell.
         const inlinePhotos = splitList(a.photos).filter(isWebUrl).map((url) => ({
-          type: "photo", mtype: "photo", label: "", src: url, full: url,
+          type: "photo", mtype: "photo", label: "", alt: "", src: url, thumbnail: url, full: url,
         }));
         // 3) Inline videos from the Albums row (YouTube / TikTok / Facebook links).
         const inlineVideos = splitList(a.videos)
@@ -611,6 +626,101 @@
     return ref;
   }
 
+  // Let a lightbox react as soon as a horizontal trackpad/touch gesture starts.
+  // Trackpad inertia may advance multiple items; touch follows the finger and
+  // changes one item on release. Two-finger pinch is left to the browser.
+  function useStepTrackpad(ref, onStep, enabled) {
+    const onStepRef = useRef(onStep);
+    const travelRef = useRef(0);
+    const touchRef = useRef(null);
+    const frameRef = useRef(0);
+    const [motion, setMotion] = useState({ offset: 0, active: false });
+    onStepRef.current = onStep;
+
+    useEffect(() => {
+      const el = ref.current;
+      if (!el || !enabled) return;
+      let resetTimer = 0;
+      const renderMotion = () => {
+        frameRef.current = 0;
+        setMotion({
+          offset: Math.max(-64, Math.min(64, -travelRef.current)),
+          active: true,
+        });
+      };
+      const onWheel = (e) => {
+        const dx = horizontalWheelDelta(e);
+        if (!dx) return;
+        e.preventDefault();
+        // Keep consuming distance so one deliberate swipe may move more than
+        // one item, including the trackpad's native inertial tail.
+        const movement = trackpadSteps(travelRef.current, dx);
+        const steps = movement.steps;
+        travelRef.current = movement.remainder;
+        if (steps) {
+          const direction = steps > 0 ? 1 : -1;
+          for (let i = 0; i < Math.abs(steps); i++) onStepRef.current(direction);
+        }
+
+        if (!frameRef.current) frameRef.current = requestAnimationFrame(renderMotion);
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => {
+          travelRef.current = 0;
+          setMotion({ offset: 0, active: false });
+        }, CONFIG.GESTURE.SNAP_DELAY_MS);
+      };
+
+      const onTouchStart = (e) => {
+        if (e.touches.length !== 1) { touchRef.current = null; return; }
+        const t = e.touches[0];
+        touchRef.current = { startX: t.clientX, startY: t.clientY, lastX: t.clientX, axis: "" };
+      };
+      const onTouchMove = (e) => {
+        const state = touchRef.current;
+        if (!state || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        const dx = t.clientX - state.startX;
+        const dy = t.clientY - state.startY;
+        if (!state.axis) state.axis = gestureAxis(dx, dy);
+        if (state.axis !== "horizontal") return;
+        e.preventDefault();
+        state.lastX = t.clientX;
+        setMotion({ offset: Math.max(-110, Math.min(110, dx)), active: true });
+      };
+      const finishTouch = () => {
+        const state = touchRef.current;
+        touchRef.current = null;
+        if (state && state.axis === "horizontal") {
+          const dx = state.lastX - state.startX;
+          if (Math.abs(dx) >= CONFIG.GESTURE.TOUCH_SWIPE_THRESHOLD) {
+            onStepRef.current(dx < 0 ? 1 : -1);
+          }
+        }
+        setMotion({ offset: 0, active: false });
+      };
+
+      el.addEventListener("wheel", onWheel, { passive: false });
+      el.addEventListener("touchstart", onTouchStart, { passive: true });
+      el.addEventListener("touchmove", onTouchMove, { passive: false });
+      el.addEventListener("touchend", finishTouch);
+      el.addEventListener("touchcancel", finishTouch);
+      return () => {
+        el.removeEventListener("wheel", onWheel);
+        el.removeEventListener("touchstart", onTouchStart);
+        el.removeEventListener("touchmove", onTouchMove);
+        el.removeEventListener("touchend", finishTouch);
+        el.removeEventListener("touchcancel", finishTouch);
+        clearTimeout(resetTimer);
+        if (frameRef.current) cancelAnimationFrame(frameRef.current);
+        frameRef.current = 0;
+        travelRef.current = 0;
+        touchRef.current = null;
+      };
+    }, [ref, enabled]);
+
+    return motion;
+  }
+
   /* ---- Full-width state panel (loading / error / empty / config) ----------- */
   function StatePanel({ status, error }) {
     if (status === "ready") return null;
@@ -680,6 +790,24 @@
     return rawX * scale;
   }
 
+  // Convert wheel pixels to a fractional coverflow position. Keeping this
+  // fractional is what makes the cards follow the fingers before snapping.
+  function trackpadPosition(current, delta, length, pixelsPerItem = CONFIG.GESTURE.HERO_PIXELS_PER_ITEM) {
+    if (length <= 1) return 0;
+    return Math.min(length - 1, Math.max(0, current + delta / pixelsPerItem));
+  }
+
+  function trackpadSteps(travel, delta, threshold = CONFIG.GESTURE.LIGHTBOX_PIXELS_PER_ITEM) {
+    const total = travel + delta;
+    const steps = Math.max(-4, Math.min(4, Math.trunc(total / threshold)));
+    return { steps, remainder: total - steps * threshold };
+  }
+
+  function gestureAxis(dx, dy, minimum = 6) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < minimum) return "";
+    return Math.abs(dx) > Math.abs(dy) * 1.15 ? "horizontal" : "vertical";
+  }
+
   /* ============================================================================
    *  BRAND LOCKUP
    * ========================================================================== */
@@ -716,6 +844,48 @@
       </div>`;
   }
 
+  function HeroCard({ album, off, abs, isCenter, active, onOpen, onGoTo }) {
+    const [loaded, setLoaded] = useState(!album.cover);
+    const [failed, setFailed] = useState(false);
+    const naturalSize = !!album.cover && loaded && !failed;
+    const edgeOpacity = Math.max(0, Math.min(1, 3 - abs));
+    const maxImageHeight = "calc(clamp(280px,46vw,520px) - 20px)";
+    const finishLoad = (e) => {
+      const image = e.currentTarget;
+      const unavailable = image.naturalWidth && image.naturalWidth <= 120;
+      coverOnLoad(e);
+      if (!unavailable) setLoaded(true);
+      else if (image.style.display === "none") { setFailed(true); setLoaded(true); }
+    };
+    const failLoad = (e) => {
+      coverStepDown(e);
+      if (e.currentTarget.style.display === "none") { setFailed(true); setLoaded(true); }
+    };
+    return html`
+      <div class="mer-cf" role="button" tabindex=${abs >= 2.75 ? -1 : 0}
+        aria-label=${isCenter ? `เปิด ${album.title}` : `เลื่อนไป ${album.title}`}
+        onClick=${() => (isCenter ? onOpen() : onGoTo())}
+        onKeyDown=${(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); isCenter ? onOpen() : onGoTo(); } }}
+        style=${{ position: "absolute", top: "50%", left: "50%", width: naturalSize ? "fit-content" : "clamp(280px,44vw,580px)", maxWidth: "min(82vw,580px)", aspectRatio: naturalSize ? undefined : "16 / 9",
+          borderRadius: "16px", overflow: "hidden", backgroundColor: "#eaeaea",
+          transform: `translate(-50%, -50%) translate3d(${off * 54}%,0,0) scale(${Math.max(0.62, 1 - abs * 0.15)})`,
+          zIndex: String(30 - Math.round(abs)), opacity: edgeOpacity,
+          boxShadow: isCenter ? "0 34px 70px -18px rgba(0,0,0,0.14), 0 14px 34px -12px rgba(0,0,0,0.08)" : "0 22px 50px -20px rgba(0,0,0,0.10)",
+          border: "1px solid rgba(0,0,0,0.06)", transition: active ? "none" : "transform 0.42s cubic-bezier(0.2,0.8,0.2,1), opacity 0.28s, box-shadow 0.28s",
+          cursor: "pointer", pointerEvents: abs >= 2.75 ? "none" : "auto", willChange: "transform, opacity", backfaceVisibility: "hidden" }}>
+        ${album.cover && !failed
+          ? html`<img src=${album.cover} alt="" loading=${isCenter ? "eager" : "lazy"} decoding="async" onError=${failLoad} onLoad=${finishLoad}
+              style=${{ position: naturalSize ? "relative" : "absolute", inset: naturalSize ? undefined : 0, width: naturalSize ? "auto" : "100%", height: naturalSize ? "auto" : "100%", maxWidth: "min(82vw,580px)", maxHeight: maxImageHeight, objectFit: "contain", display: "block", opacity: loaded ? 1 : 0 }} />`
+          : html`<${CoverTile} platform=${album.media[0] && album.media[0].platform} />`}
+        <div style=${{ position: "absolute", inset: 0, pointerEvents: "none", transition: "background 0.5s",
+          background: isCenter ? "transparent" : `rgba(247,247,247,${Math.min(0.66, 0.4 + (abs - 1) * 0.24)})` }}></div>
+        <div style=${{ position: "absolute", right: "16px", bottom: "16px", display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, color: "#fff", background: "rgba(26,26,26,0.72)", padding: "6px 12px", borderRadius: "999px" }}>
+          <${StackGlyph} size="12px" radius="2.5px" bg="rgba(26,26,26,0.58)" />
+          ${album.media.length} รายการ
+        </div>
+      </div>`;
+  }
+
   /* ============================================================================
    *  APP
    * ========================================================================== */
@@ -723,11 +893,14 @@
     const { data, status, error, warn } = useGalleryData();
     const [active, setActive] = useState("all");
     const [center, setCenter] = useState(0);
+    const [trackpadActive, setTrackpadActive] = useState(false);
     const [openAlbumId, setOpenAlbumId] = useState(null);
     const [mediaIndex, setMediaIndex] = useState(null);
     const [solo, setSolo] = useState(false); // opened straight into the lightbox (single-media work)
-    const touchX = useRef(0);
+    const heroTouchRef = useRef(null);
     const stageRef = useRef(null);
+    const centerRef = useRef(0);
+    const wheelFrameRef = useRef(0);
 
     const tabs = buildTabs(data);
     const matches = (d) => active === "all" || d.category.toLowerCase() === active;
@@ -741,10 +914,18 @@
 
     const album = data.find((d) => d.id === openAlbumId) || null;
 
-    const selectTab = (key) => { setActive(key); setCenter(0); };
+    const selectTab = (key) => { setActive(key); centerRef.current = 0; setCenter(0); setTrackpadActive(false); };
+    const goTo = (index) => {
+      centerRef.current = index;
+      setTrackpadActive(false);
+      setCenter(index);
+    };
     const step = (dir) => setCenter((c) => {
       const l = data.filter(matches).length;
-      return Math.min(l - 1, Math.max(0, c + dir));
+      const next = Math.min(l - 1, Math.max(0, Math.round(c) + dir));
+      centerRef.current = next;
+      setTrackpadActive(false);
+      return next;
     });
     // Single-media works (e.g. a lone video) open straight into the lightbox;
     // multi-media works open the album grid first.
@@ -782,43 +963,80 @@
     }, [mediaIndex, openAlbumId, album, solo]);
 
     useEffect(() => () => { document.body.style.overflow = ""; }, []);
+    useEffect(() => {
+      setCenter((c) => {
+        const next = Math.min(Math.max(0, len - 1), Math.max(0, c));
+        centerRef.current = next;
+        return next;
+      });
+    }, [len]);
 
-    const swipeStart = (e) => { touchX.current = e.touches[0].clientX; };
-    const swipeEnd = (e) => {
-      const dx = e.changedTouches[0].clientX - touchX.current;
-      if (Math.abs(dx) > 44) step(dx < 0 ? 1 : -1);
+    const swipeStart = (e) => {
+      if (e.touches.length !== 1) { heroTouchRef.current = null; return; }
+      const t = e.touches[0];
+      heroTouchRef.current = {
+        startX: t.clientX, startY: t.clientY, startCenter: centerRef.current, axis: "",
+      };
+    };
+    const swipeMove = (e) => {
+      const state = heroTouchRef.current;
+      if (!state || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = state.startX - t.clientX;
+      const dy = state.startY - t.clientY;
+      if (!state.axis) state.axis = gestureAxis(dx, dy);
+      if (state.axis !== "horizontal") return;
+      e.preventDefault();
+      const next = trackpadPosition(state.startCenter, dx, len);
+      centerRef.current = next;
+      setTrackpadActive(true);
+      setCenter(next);
+    };
+    const swipeEnd = () => {
+      const state = heroTouchRef.current;
+      heroTouchRef.current = null;
+      if (!state || state.axis !== "horizontal") return;
+      goTo(Math.round(centerRef.current));
     };
 
-    // Trackpads emit horizontal WheelEvents for a two-finger sideways gesture.
-    // Use a native non-passive listener so we can contain only that horizontal
-    // gesture while leaving vertical page scrolling completely untouched.
+    // Follow two-finger horizontal movement continuously, then snap to the
+    // nearest work after the gesture (including inertial events) has ended.
+    // Vertical two-finger scrolling remains entirely native.
     useEffect(() => {
       const stage = stageRef.current;
       if (!stage || len < 2) return;
-      let sum = 0;
-      let triggered = false;
-      let resetTimer = 0;
-      const resetGesture = () => { sum = 0; triggered = false; resetTimer = 0; };
+      let snapTimer = 0;
       const onWheel = (e) => {
         const dx = horizontalWheelDelta(e);
         if (!dx) return;
         e.preventDefault();
-        clearTimeout(resetTimer);
-        resetTimer = setTimeout(resetGesture, 140);
-        if (triggered) return;
-        sum += dx;
-        if (Math.abs(sum) < 36) return;
-        triggered = true;
-        setCenter((c) => Math.min(len - 1, Math.max(0, c + (sum > 0 ? 1 : -1))));
+        setTrackpadActive(true);
+        centerRef.current = trackpadPosition(centerRef.current, dx, len);
+        if (!wheelFrameRef.current) {
+          wheelFrameRef.current = requestAnimationFrame(() => {
+            wheelFrameRef.current = 0;
+            setCenter(centerRef.current);
+          });
+        }
+        clearTimeout(snapTimer);
+        snapTimer = setTimeout(() => {
+          const snapped = Math.round(centerRef.current);
+          centerRef.current = snapped;
+          setTrackpadActive(false);
+          setCenter(snapped);
+        }, CONFIG.GESTURE.SNAP_DELAY_MS);
       };
       stage.addEventListener("wheel", onWheel, { passive: false });
       return () => {
         stage.removeEventListener("wheel", onWheel);
-        clearTimeout(resetTimer);
+        clearTimeout(snapTimer);
+        if (wheelFrameRef.current) cancelAnimationFrame(wheelFrameRef.current);
+        wheelFrameRef.current = 0;
       };
     }, [len, active]);
 
-    const ac = filtered[curCenter];
+    const activeIndex = Math.min(Math.max(0, len - 1), Math.round(curCenter));
+    const ac = filtered[activeIndex];
     const activeTitle = ac ? ac.title : "";
     const activeMeta = ac ? `${ac.category} · ${ac.client} · ${ac.media.length} รายการ` : "";
     const showStage = len > 0;
@@ -848,43 +1066,22 @@
         ${/* ---- COVERFLOW ---- */""}
         ${showStage && html`
           <${Fragment}>
-            <section ref=${stageRef} onTouchStart=${swipeStart} onTouchEnd=${swipeEnd}
-              role="region" aria-roledescription="carousel" aria-label="ผลงานแนะนำ ปัดสองนิ้วซ้ายหรือขวาบนทัชแพดเพื่อเลื่อน"
-              style=${{ position: "relative", height: "clamp(220px,32vw,400px)", margin: "clamp(28px,4vh,52px) 0 clamp(8px,2vh,18px)", overflow: "hidden", touchAction: "pan-y", overscrollBehaviorX: "contain" }}>
+            <section ref=${stageRef} data-testid="hero-carousel" onTouchStart=${swipeStart} onTouchMove=${swipeMove} onTouchEnd=${swipeEnd} onTouchCancel=${swipeEnd}
+              role="region" aria-roledescription="carousel" aria-label="ผลงานแนะนำ ปัดนิ้วบนหน้าจอหรือปัดสองนิ้วบนทัชแพดเพื่อเลื่อน"
+              style=${{ position: "relative", height: "clamp(280px,46vw,520px)", margin: "clamp(28px,4vh,52px) 0 clamp(8px,2vh,18px)", overflow: "hidden", touchAction: "pan-y pinch-zoom", overscrollBehaviorX: "contain" }}>
               ${filtered.map((d, i) => {
                 const off = i - curCenter;
                 const abs = Math.abs(off);
-                // Keep one invisible card beyond each visible edge so the next
-                // item can animate in instead of popping into the DOM mid-swipe.
-                if (abs > 3) return null;
-                const isCenter = off === 0;
-                return html`
-                  <div key=${d.id} class="mer-cf" role="button" tabindex=${abs === 3 ? -1 : 0}
-                    aria-label=${isCenter ? `เปิด ${d.title}` : `เลื่อนไป ${d.title}`}
-                    onClick=${() => (isCenter ? openAlbum(d.id) : setCenter(i))}
-                    onKeyDown=${(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); isCenter ? openAlbum(d.id) : setCenter(i); } }}
-                    style=${{ position: "absolute", top: "50%", left: "50%", width: "clamp(280px, 44vw, 580px)", aspectRatio: "16 / 9",
-                      borderRadius: "16px", overflow: "hidden", backgroundColor: "#eaeaea",
-                      transform: `translate(-50%, -50%) translate3d(${off * 54}%,0,0) scale(${Math.max(0.62, 1 - abs * 0.15)})`,
-                      zIndex: String(30 - abs), opacity: abs === 3 ? 0 : 1,
-                      boxShadow: isCenter ? "0 34px 70px -18px rgba(0,0,0,0.14), 0 14px 34px -12px rgba(0,0,0,0.08)" : "0 22px 50px -20px rgba(0,0,0,0.10)",
-                      border: "1px solid rgba(0,0,0,0.06)", transition: "transform 0.6s cubic-bezier(0.2,0.8,0.2,1), opacity 0.5s, box-shadow 0.5s",
-                      cursor: "pointer", pointerEvents: abs === 3 ? "none" : "auto", willChange: "transform, opacity", backfaceVisibility: "hidden" }}>
-                    ${d.cover
-                      ? html`<img src=${d.cover} alt="" loading=${isCenter ? "eager" : "lazy"} decoding="async" onError=${coverStepDown} onLoad=${coverOnLoad} style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }} />`
-                      : html`<${CoverTile} platform=${d.media[0] && d.media[0].platform} />`}
-                    <div style=${{ position: "absolute", inset: 0, pointerEvents: "none", transition: "background 0.5s",
-                      background: isCenter ? "transparent" : `rgba(247,247,247,${Math.min(0.66, 0.4 + (abs - 1) * 0.24)})` }}></div>
-                    <div style=${{ position: "absolute", right: "16px", bottom: "16px", display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, color: "#fff", background: "rgba(26,26,26,0.72)", padding: "6px 12px", borderRadius: "999px" }}>
-                      <${StackGlyph} size="12px" radius="2.5px" bg="rgba(26,26,26,0.58)" />
-                      ${d.media.length} รายการ
-                    </div>
-                  </div>`;
+                // Keep a small invisible buffer for continuous movement.
+                if (abs > 3.5) return null;
+                const isCenter = i === activeIndex;
+                return html`<${HeroCard} key=${d.id} album=${d} off=${off} abs=${abs} isCenter=${isCenter} active=${trackpadActive}
+                  onOpen=${() => openAlbum(d.id)} onGoTo=${() => goTo(i)} />`;
               })}
             </section>
 
             <div style=${{ textAlign: "center", margin: "clamp(12px,2vh,20px) auto clamp(4px,1vh,8px)", minHeight: "46px", padding: "0 20px" }}>
-              <div style=${{ fontWeight: 500, fontSize: "clamp(17px,2vw,21px)", color: "#1f1f1f" }}>${activeTitle}</div>
+              <div data-testid="hero-title" style=${{ fontWeight: 500, fontSize: "clamp(17px,2vw,21px)", color: "#1f1f1f" }}>${activeTitle}</div>
               <div style=${{ fontSize: "12.5px", color: "#00BF61", fontWeight: 600, letterSpacing: "0.03em", marginTop: "3px" }}>${activeMeta}</div>
             </div>
 
@@ -928,7 +1125,7 @@
         ${album && !solo && html`<${AlbumModal} album=${album} onClose=${closeAlbum} onOpenMedia=${openMedia} onStop=${(e) => e.stopPropagation()} />`}
 
         ${/* ---- SINGLE MEDIA LIGHTBOX ---- */""}
-        ${album && mediaIndex != null && html`<${MediaLightbox} album=${album} index=${mediaIndex} single=${album.media.length <= 1} onClose=${closeMedia} onPrev=${() => stepMedia(-1)} onNext=${() => stepMedia(1)} onStop=${(e) => e.stopPropagation()} />`}
+        ${album && mediaIndex != null && html`<${MediaLightbox} album=${album} index=${mediaIndex} single=${album.media.length <= 1} onClose=${closeMedia} onPrev=${() => stepMedia(-1)} onNext=${() => stepMedia(1)} onSelect=${setMediaIndex} onStop=${(e) => e.stopPropagation()} />`}
       </div>`;
   }
 
@@ -944,24 +1141,34 @@
     const [hover, setHover] = useState(false);
     const [focus, setFocus] = useState(false);
     const [loaded, setLoaded] = useState(!album.cover);
+    const [ratio, setRatio] = useState("16 / 9");
     const active = hover || focus;
     const catLabel = album.category;
+    const loadCover = (e) => {
+      const image = e.currentTarget;
+      const unavailable = image.naturalWidth && image.naturalWidth <= 120;
+      coverOnLoad(e);
+      if (!unavailable) {
+        if (image.naturalWidth && image.naturalHeight) setRatio(`${image.naturalWidth} / ${image.naturalHeight}`);
+        setLoaded(true);
+      } else if (image.style.display === "none") setLoaded(true);
+    };
     return html`
-      <div class="mer-grid-card" role="button" tabindex="0" aria-label=${`เปิด ${album.title}`}
+      <div class="mer-grid-card" data-testid=${`album-card-${album.id}`} role="button" tabindex="0" aria-label=${`เปิด ${album.title}`}
         onClick=${onOpen}
         onKeyDown=${(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
         onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
         onFocus=${() => setFocus(true)} onBlur=${() => setFocus(false)}
-        style=${{ cursor: "pointer", background: "#ffffff", border: `1px solid ${active ? GREEN : "#ececec"}`, borderRadius: "16px", overflow: "hidden",
+        style=${{ cursor: "pointer", alignSelf: "start", background: "#ffffff", border: `1px solid ${active ? GREEN : "#ececec"}`, borderRadius: "16px", overflow: "hidden",
           transition: "transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease",
           transform: hover ? "translateY(-5px)" : "none", boxShadow: hover ? "0 18px 40px rgba(0,0,0,0.12)" : "none",
           outline: focus ? `2px solid ${GREEN}` : "none", outlineOffset: focus ? "2px" : undefined }}>
-        <div style=${{ position: "relative", aspectRatio: "16/9", overflow: "hidden", background: loaded ? "#ececec" : "linear-gradient(100deg,#ececec 30%,#f3f3f3 50%,#ececec 70%)", backgroundSize: "200% 100%", animation: loaded ? "none" : "merShimmer 1.4s ease-in-out infinite" }}>
+        <div style=${{ position: "relative", aspectRatio: ratio, overflow: "hidden", background: loaded ? "#ececec" : "linear-gradient(100deg,#ececec 30%,#f3f3f3 50%,#ececec 70%)", backgroundSize: "200% 100%", animation: loaded ? "none" : "merShimmer 1.4s ease-in-out infinite" }}>
           ${album.cover
             ? html`<img src=${album.cover} alt="" loading="lazy" decoding="async"
                 onError=${(e) => { coverStepDown(e); setLoaded(true); }}
-                onLoad=${(e) => { coverOnLoad(e); setLoaded(true); }}
-                style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block", transition: "transform 0.8s cubic-bezier(0.2,0.8,0.2,1)", transform: hover ? "scale(1.06)" : "none" }} />`
+                onLoad=${loadCover}
+                style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", display: "block", transition: "transform 0.8s cubic-bezier(0.2,0.8,0.2,1)", transform: hover ? "scale(1.03)" : "none" }} />`
             : html`<${CoverTile} platform=${album.media[0] && album.media[0].platform} />`}
           <div style=${{ position: "absolute", top: "12px", left: "12px", fontSize: "11px", fontWeight: 600, color: "#007339", background: "rgba(255,255,255,0.96)", padding: "5px 11px", borderRadius: "999px", pointerEvents: "none" }}>${catLabel}</div>
           <div style=${{ position: "absolute", right: "12px", bottom: "12px", display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 600, color: "#fff", background: "rgba(26,26,26,0.72)", padding: "5px 11px", borderRadius: "999px", pointerEvents: "none" }}>
@@ -981,20 +1188,30 @@
 
   /* ---- Media thumbnail (inside album modal) -------------------------------- */
   function MediaThumb({ item, onOpen }) {
+    const isVideo = item.type === "video";
     const [hover, setHover] = useState(false);
     const [focus, setFocus] = useState(false);
-    const isVideo = item.type === "video";
-    const thumb = isVideo ? videoThumb(item, "hqdefault") : item.src;
+    const [loaded, setLoaded] = useState(false);
+    const [ratio, setRatio] = useState(isVideo ? "16 / 9" : "4 / 3");
+    // The album view must reflect the original photo's proportions. A separate
+    // thumbnail may already be square/landscape-cropped, so using it here would
+    // make naturalWidth/naturalHeight report the crop rather than the photo.
+    const thumb = isVideo ? videoThumb(item, "hqdefault") : (item.full || item.src || item.thumbnail);
     return html`
-      <div role="button" tabindex="0" aria-label=${item.label || (item.type === "video" ? "เล่นวิดีโอ" : "ดูรูป")}
+      <div data-testid="media-thumb" role="button" tabindex="0" aria-label=${item.label || (item.type === "video" ? "เล่นวิดีโอ" : "ดูรูป")}
         onClick=${onOpen}
         onKeyDown=${(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
         onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
         onFocus=${() => setFocus(true)} onBlur=${() => setFocus(false)}
-        style=${{ position: "relative", aspectRatio: "1/1", borderRadius: "12px", overflow: "hidden", cursor: "pointer", background: "#ececec",
+        style=${{ position: "relative", aspectRatio: ratio, alignSelf: "start", borderRadius: "12px", overflow: "hidden", cursor: "pointer", background: loaded ? "#ececec" : "linear-gradient(100deg,#e6e6e6 30%,#f0f0f0 50%,#e6e6e6 70%)", backgroundSize: "200% 100%", animation: loaded || !thumb ? "none" : "merShimmer 1.4s ease-in-out infinite",
           transition: "transform 0.25s ease, box-shadow 0.25s ease", transform: hover ? "translateY(-3px)" : "none", boxShadow: hover ? "0 14px 30px rgba(0,0,0,0.14)" : "none",
           outline: focus ? `2px solid ${GREEN}` : "none", outlineOffset: focus ? "2px" : undefined }}>
-        <div style=${{ position: "absolute", inset: 0, backgroundImage: `url("${thumb}")`, backgroundSize: "cover", backgroundPosition: "center" }}></div>
+        ${thumb
+          ? html`<img src=${thumb} alt="" loading="lazy" decoding="async"
+              onLoad=${(e) => { const image = e.currentTarget; if (!isVideo && image.naturalWidth && image.naturalHeight) setRatio(`${image.naturalWidth} / ${image.naturalHeight}`); setLoaded(true); }}
+              onError=${(e) => { setLoaded(true); e.currentTarget.style.display = "none"; }}
+              style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", display: "block" }} />`
+          : html`<${CoverTile} platform=${item.platform} />`}
         ${isVideo && html`
           <div style=${{ position: "absolute", inset: 0, background: "rgba(26,26,26,0.12)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
             <div style=${{ width: "44px", height: "44px", borderRadius: "50%", background: "rgba(255,255,255,0.92)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>
@@ -1042,39 +1259,94 @@
       style=${{ ...style, background: hover ? GREEN : "rgba(255,255,255,0.14)", border: `1px solid ${hover ? GREEN : "rgba(255,255,255,0.3)"}`, color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>${label}</button>`;
   }
 
-  function MediaLightbox({ album, index, single, onClose, onPrev, onNext, onStop }) {
+  function LightboxPhoto({ item, alt }) {
+    const src = item.full || item.src;
+    const [loaded, setLoaded] = useState(false);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => { setLoaded(false); setFailed(false); }, [src]);
+    return html`
+      <div style=${{ position: "relative", width: loaded ? "fit-content" : "100%", maxWidth: "100%", height: loaded ? "auto" : "min(74vh,780px)", minHeight: loaded ? 0 : "240px", borderRadius: "14px", overflow: "hidden", background: loaded || failed ? "#111" : "linear-gradient(100deg,#171717 30%,#242424 50%,#171717 70%)", backgroundSize: "200% 100%", animation: loaded || failed ? "none" : "merShimmer 1.4s ease-in-out infinite", boxShadow: "0 30px 80px rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        ${!failed && html`<img src=${src} alt=${alt} decoding="async" fetchpriority="high" draggable="false"
+          onLoad=${() => setLoaded(true)} onError=${() => setFailed(true)}
+          style=${{ width: "auto", height: "auto", maxWidth: "100%", maxHeight: "74vh", objectFit: "contain", display: loaded ? "block" : "none", userSelect: "none", WebkitUserDrag: "none", touchAction: "pan-y pinch-zoom" }} />`}
+        ${failed && html`<div role="status" style=${{ color: "rgba(255,255,255,0.78)", fontSize: "14px", textAlign: "center", padding: "24px" }}>โหลดรูปนี้ไม่สำเร็จ กรุณาลองเปิดรูปต้นฉบับ</div>`}
+        ${!loaded && !failed && html`<span role="status" style=${{ position: "absolute", color: "rgba(255,255,255,0.66)", fontSize: "13px" }}>กำลังโหลดรูปความละเอียดสูง…</span>`}
+      </div>`;
+  }
+
+  function MediaLightbox({ album, index, single, onClose, onPrev, onNext, onSelect, onStop }) {
     const m = album.media[index];
     const isVideo = m.type === "video";
     const title = m.label || `${album.title} · ${index + 1}`;
     const isTikTok = m.platform === "tiktok"; // portrait player
     const embedSrc = videoEmbed(m);
     const watchUrl = m.vurl || "";
+    const photoUrl = !isVideo ? (m.full || m.src) : "";
+    const [showGestureHint, setShowGestureHint] = useState(false);
     const watchLabel = "เปิดใน " + (PLATFORM_NAME[m.platform] || "แหล่งที่มา");
     // TikTok is 9:16; YouTube/Facebook 16:9.
     const videoBox = isTikTok
       ? { height: "min(80vh, 760px)", aspectRatio: "9 / 16", maxWidth: "100%", borderRadius: "14px", overflow: "hidden", background: "#000", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }
       : { width: "100%", aspectRatio: "16 / 9", borderRadius: "14px", overflow: "hidden", background: "#000", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" };
     const dlg = useDialog();
+    const trackpad = useStepTrackpad(dlg, (direction) => direction > 0 ? onNext() : onPrev(), !single);
+    useEffect(() => {
+      if (single) return;
+      try {
+        if (window.localStorage.getItem("gallery-gesture-hint-v1")) return;
+        window.localStorage.setItem("gallery-gesture-hint-v1", "seen");
+      } catch (e) { /* storage can be blocked; the hint may appear again */ }
+      setShowGestureHint(true);
+      const timer = setTimeout(() => setShowGestureHint(false), 3800);
+      return () => clearTimeout(timer);
+    }, [single]);
+    useEffect(() => {
+      if (single || album.media.length < 2) return;
+      const count = album.media.length;
+      const neighbours = [album.media[(index - 1 + count) % count], album.media[(index + 1) % count]];
+      neighbours.forEach((item) => {
+        if (item && item.type === "photo") {
+          const src = item.full || item.src;
+          if (src) { const preload = new Image(); preload.src = src; }
+        }
+      });
+    }, [album, index, single]);
     return html`
-      <div ref=${dlg} role="dialog" aria-modal="true" aria-label=${title} tabindex="-1" onClick=${onClose} style=${{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(15,15,15,0.86)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "clamp(12px,4vw,64px)", animation: "merFade 0.25s ease", outline: "none" }}>
+      <div ref=${dlg} data-testid="media-lightbox" role="dialog" aria-modal="true" aria-label=${`${title}${single ? "" : " ปัดนิ้วบนหน้าจอหรือปัดสองนิ้วบนทัชแพดเพื่อดูรายการอื่น"}`} tabindex="-1" onClick=${onClose} style=${{ position: "fixed", inset: 0, zIndex: 120, background: "rgba(15,15,15,0.86)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "clamp(12px,4vw,64px)", animation: "merFade 0.25s ease", outline: "none", overflowY: "auto", overscrollBehaviorX: "contain", touchAction: "pan-y pinch-zoom" }}>
 
         <${LightboxBtn} label="✕" ariaLabel="ปิด" onClick=${onClose} style=${{ position: "absolute", top: "20px", right: "20px", zIndex: 5, width: "42px", height: "42px", borderRadius: "50%", fontSize: "18px", lineHeight: 1 }} />
         ${!single && html`<${LightboxBtn} label="←" ariaLabel="ก่อนหน้า" onClick=${onPrev} style=${{ position: "absolute", left: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />`}
         ${!single && html`<${LightboxBtn} label="→" ariaLabel="ถัดไป" onClick=${onNext} style=${{ position: "absolute", right: "clamp(8px,2vw,28px)", top: "50%", transform: "translateY(-50%)", zIndex: 5, width: "50px", height: "50px", borderRadius: "50%", fontSize: "20px" }} />`}
+        ${showGestureHint && html`<div role="status" style=${{ position: "absolute", top: "22px", left: "50%", transform: "translateX(-50%)", zIndex: 4, maxWidth: "calc(100% - 150px)", padding: "8px 14px", borderRadius: "999px", background: "rgba(15,15,15,0.7)", color: "rgba(255,255,255,0.88)", fontSize: "12px", textAlign: "center", pointerEvents: "none", animation: "merFade 0.25s ease" }}>ปัดซ้าย–ขวาด้วยนิ้วหรือทัชแพดเพื่อดูรายการถัดไป</div>`}
 
-        <div onClick=${onStop} style=${{ width: "100%", maxWidth: "1100px", display: "flex", flexDirection: "column", alignItems: "center", gap: "18px", animation: "merPop 0.3s cubic-bezier(0.2,0.8,0.2,1) both" }}>
+        <div key=${`${album.id}:${index}`} onClick=${onStop} style=${{ width: "100%", maxWidth: "1100px", display: "flex", flexDirection: "column", alignItems: "center", gap: "18px", animation: "merFade 0.16s ease both", transform: `translate3d(${trackpad.offset}px,0,0)`, opacity: Math.max(0.72, 1 - Math.abs(trackpad.offset) / (CONFIG.GESTURE.LIGHTBOX_PIXELS_PER_ITEM * 3)), transition: trackpad.active ? "none" : "transform 0.2s ease, opacity 0.2s ease", willChange: "transform, opacity" }}>
           ${isVideo
             ? (embedSrc
                 ? html`<div style=${videoBox}>
                     <iframe src=${embedSrc} style=${{ width: "100%", height: "100%", border: 0, display: "block" }} referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen=${true}></iframe>
                   </div>`
                 : html`<div style=${{ width: "100%", aspectRatio: "16 / 9", borderRadius: "14px", background: "#000", color: "rgba(255,255,255,0.85)", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "24px", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}>ลิงก์นี้เล่นในหน้าเว็บไม่ได้ — กด "${watchLabel}" ด้านล่างเพื่อเปิดในแหล่งที่มา</div>`)
-            : html`<div style=${{ width: "100%", maxWidth: "1100px", aspectRatio: "16 / 9", borderRadius: "14px", backgroundImage: `url("${m.full || m.src}")`, backgroundSize: "contain", backgroundPosition: "center", backgroundRepeat: "no-repeat", boxShadow: "0 30px 80px rgba(0,0,0,0.5)" }}></div>`}
+            : html`<${LightboxPhoto} item=${m} alt=${m.alt || title} />`}
+          ${!single && html`
+            <div data-testid="media-strip" class="mer-noscroll" aria-label="เลือกรูปหรือวิดีโอ" style=${{ width: "100%", display: "flex", justifyContent: "safe center", gap: "8px", overflowX: "auto", scrollbarWidth: "none", padding: "2px 4px" }}>
+              ${album.media.map((item, itemIndex) => {
+                const current = itemIndex === index;
+                const thumb = item.type === "video" ? videoThumb(item, "hqdefault") : (item.thumbnail || item.src);
+                return html`<button key=${itemIndex} onClick=${(e) => { e.stopPropagation(); onSelect(itemIndex); }} aria-label=${`ดูรายการ ${itemIndex + 1}`}
+                  aria-current=${current ? "true" : undefined}
+                  style=${{ position: "relative", flex: "0 0 auto", width: "58px", height: "40px", padding: 0, overflow: "hidden", borderRadius: "7px", border: current ? `2px solid ${GREEN}` : "1px solid rgba(255,255,255,0.25)", background: "#222", cursor: "pointer", opacity: current ? 1 : 0.64, transition: "opacity 0.2s,border-color 0.2s" }}>
+                  ${thumb
+                    ? html`<img src=${thumb} alt="" loading="lazy" decoding="async" style=${{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />`
+                    : html`<span aria-hidden="true" style=${{ color: "#fff", fontSize: "14px" }}>▶</span>`}
+                </button>`;
+              })}
+            </div>`}
           <div style=${{ display: "flex", alignItems: "center", gap: "16px", color: "#fff", flexWrap: "wrap", justifyContent: "center" }}>
             <span style=${{ fontWeight: 500, fontSize: "15px" }}>${title}</span>
             <span style=${{ width: "4px", height: "4px", borderRadius: "50%", background: "rgba(255,255,255,0.4)" }}></span>
-            <span style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 600, fontSize: "13px", color: "rgba(255,255,255,0.7)", letterSpacing: "0.04em" }}>${index + 1} / ${album.media.length}</span>
+            <span data-testid="media-count" style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 600, fontSize: "13px", color: "rgba(255,255,255,0.7)", letterSpacing: "0.04em" }}>${index + 1} / ${album.media.length}</span>
             ${isVideo && watchUrl && html`<a href=${watchUrl} target="_blank" rel="noopener noreferrer" style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 600, fontSize: "13px", color: "#02D767", textDecoration: "none", borderBottom: "1px solid rgba(2,215,103,0.5)", paddingBottom: "1px" }}>${watchLabel} ↗</a>`}
+            ${!isVideo && photoUrl && html`<a href=${photoUrl} target="_blank" rel="noopener noreferrer" style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 600, fontSize: "13px", color: "#02D767", textDecoration: "none", borderBottom: "1px solid rgba(2,215,103,0.5)", paddingBottom: "1px" }}>เปิดรูปต้นฉบับ ↗</a>`}
           </div>
         </div>
       </div>`;
