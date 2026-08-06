@@ -10,7 +10,7 @@
 <meta property="og:description" content="แกลเลอรีผลงานภาพและวิดีโอของ Bitkub Media Production">
 <meta property="og:image" content="assets/logo.png">
 <meta name="twitter:card" content="summary">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://docs.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com https://www.tiktok.com; frame-src https://www.youtube.com https://www.tiktok.com https://www.facebook.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://docs.google.com https://www.youtube.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://www.googleapis.com https://www.tiktok.com; frame-src https://www.youtube.com https://www.tiktok.com https://www.facebook.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2302D767'/%3E%3Cpath d='M13 10l9 6-9 6z' fill='%23fff'/%3E%3C/svg%3E">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -243,6 +243,13 @@
     };
   }
 
+  function playlistEntriesFromIds(ids, title) {
+    const seen = new Set();
+    return (ids || [])
+      .filter((yt) => /^[A-Za-z0-9_-]{11}$/.test(yt || "") && !seen.has(yt) && seen.add(yt))
+      .map((yt, index) => ({ yt, label: `${title || "YouTube Playlist"} · คลิป ${index + 1}` }));
+  }
+
   // Thumbnail URL for a video item. A fetched thumbnail (e.g. TikTok oEmbed)
   // wins; otherwise only YouTube exposes one directly.
   function videoThumb(m, res) {
@@ -300,6 +307,72 @@
       if (!pageToken) break;
     }
     return out;
+  }
+
+  // Official no-key fallback: the IFrame Player API exposes getPlaylist(),
+  // which returns the ordered video ids. A 200×200 off-screen player respects
+  // YouTube's minimum embed size, cues without autoplay, and is destroyed as
+  // soon as the ids have been read.
+  let _ytIframeApiPromise = null;
+  function loadYouTubeIframeApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (_ytIframeApiPromise) return _ytIframeApiPromise;
+    if (!document || !document.createElement || !document.head) return Promise.reject(new Error("ไม่มี DOM สำหรับ YouTube Player"));
+    _ytIframeApiPromise = new Promise((resolve, reject) => {
+      const previousReady = window.onYouTubeIframeAPIReady;
+      const timer = setTimeout(() => { _ytIframeApiPromise = null; reject(new Error("YouTube Player API timeout")); }, 12000);
+      window.onYouTubeIframeAPIReady = () => {
+        clearTimeout(timer);
+        if (typeof previousReady === "function") previousReady();
+        if (window.YT && window.YT.Player) resolve(window.YT);
+        else { _ytIframeApiPromise = null; reject(new Error("YouTube Player API unavailable")); }
+      };
+      const script = document.createElement("script");
+      script.src = "https://www.youtube.com/iframe_api";
+      script.async = true;
+      script.onerror = () => { clearTimeout(timer); _ytIframeApiPromise = null; reject(new Error("โหลด YouTube Player API ไม่สำเร็จ")); };
+      document.head.appendChild(script);
+    });
+    return _ytIframeApiPromise;
+  }
+
+  async function fetchPlaylistItemsFromPlayer(pid, title) {
+    const YT = await loadYouTubeIframeApi();
+    return new Promise((resolve, reject) => {
+      const mount = document.createElement("div");
+      mount.style.cssText = "position:fixed;left:-10000px;top:-10000px;width:200px;height:200px;opacity:0;pointer-events:none;";
+      document.body.appendChild(mount);
+      let player = null;
+      let settled = false;
+      const cleanup = () => {
+        clearTimeout(timer);
+        try { if (player && player.destroy) player.destroy(); } catch (e) {}
+        try { mount.remove(); } catch (e) {}
+      };
+      const fail = (message) => {
+        if (settled) return;
+        settled = true; cleanup(); reject(new Error(message));
+      };
+      const finish = () => {
+        if (settled || !player || !player.getPlaylist) return false;
+        const items = playlistEntriesFromIds(player.getPlaylist(), title);
+        if (!items.length) return false;
+        settled = true; cleanup(); resolve(items); return true;
+      };
+      const timer = setTimeout(() => fail("อ่านรายการคลิปจาก YouTube Player ไม่สำเร็จ"), 15000);
+      player = new YT.Player(mount, {
+        width: "200", height: "200",
+        playerVars: { listType: "playlist", list: pid, controls: 0, playsinline: 1, origin: /^https?:$/.test(location.protocol) ? location.origin : undefined },
+        events: {
+          onReady: (event) => {
+            player = event.target;
+            if (!finish()) player.cuePlaylist({ listType: "playlist", list: pid, index: 0, startSeconds: 0 });
+          },
+          onStateChange: () => finish(),
+          onError: () => { if (!finish()) setTimeout(() => fail("YouTube Player ปฏิเสธ Playlist นี้"), 250); },
+        },
+      });
+    });
   }
 
   // fetch() with an abort timeout so a slow/hung request can't stall loading.
@@ -471,16 +544,24 @@
     if (!ids.length) return errors;
     const byId = {};
     if (!CONFIG.YT_API_KEY) {
-      ids.forEach((pid) => { byId[pid] = null; });
-      errors.push('ไม่สามารถแยกคลิปใน Playlist ได้ — ระบบจะแสดงเป็น Playlist ที่กดเล่นได้แทน');
+      await runPool(ids, 4, async (pid) => {
+        const owner = albums.find((a) => (a.playlists || []).includes(pid));
+        try { byId[pid] = await fetchPlaylistItemsFromPlayer(pid, owner && owner.title); }
+        catch (e) { console.error("[gallery] playlist player fallback failed:", pid, e); byId[pid] = null; }
+      });
     } else {
       let failedCount = 0;
       await runPool(ids, 4, async (pid) => {
         try { byId[pid] = await fetchPlaylistItems(pid, CONFIG.YT_API_KEY); }
         catch (e) {
           console.error("[gallery] playlist fetch failed:", pid, e);
-          byId[pid] = null;
-          failedCount++;
+          const owner = albums.find((a) => (a.playlists || []).includes(pid));
+          try { byId[pid] = await fetchPlaylistItemsFromPlayer(pid, owner && owner.title); }
+          catch (fallbackError) {
+            console.error("[gallery] playlist player fallback failed:", pid, fallbackError);
+            byId[pid] = null;
+            failedCount++;
+          }
         }
       });
       if (failedCount) errors.push(`${failedCount} Playlist แสดงแบบรวม เนื่องจากไม่สามารถโหลดรายการคลิปแยกได้`);
@@ -1298,7 +1379,7 @@
           ? html`<img src=${thumb} srcSet=${thumbSrcSet || undefined} sizes="(max-width: 640px) 82vw, 260px" alt="" loading="lazy" decoding="async"
               onLoad=${(e) => { const image = e.currentTarget; if (!isVideo && image.naturalWidth && image.naturalHeight) setRatio(`${image.naturalWidth} / ${image.naturalHeight}`); setLoaded(true); }}
               onError=${(e) => { if (!imagePreviewFallback(e, originalThumb)) { setLoaded(true); e.currentTarget.style.display = "none"; } }}
-              style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", display: "block" }} />`
+              style=${{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: isVideo ? "cover" : "contain", display: "block" }} />`
           : html`<${CoverTile} platform=${item.platform} />`}
         ${isVideo && html`
           <div style=${{ position: "absolute", inset: 0, background: "rgba(26,26,26,0.12)", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>

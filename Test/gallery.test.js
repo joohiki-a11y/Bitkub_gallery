@@ -38,7 +38,7 @@ function loadModule() {
     inner +
     " return { parseVideo, videoItem, videoEmbed, videoThumb, buildAlbums, gvizToObjects, " +
     "buildTabs, expandPlaylists, enrichThumbs, flattenSpread, ytId, playlistId, splitList, " +
-    "imageVariant, imageSrcSet, heroStageAnchor }; })";
+    "imageVariant, imageSrcSet, heroStageAnchor, playlistEntriesFromIds }; })";
   const React = { useState: () => [], useEffect: () => {}, useRef: () => ({}), Fragment: 0, createElement: () => ({}) };
   const location = { protocol: "https:", origin: "https://example.netlify.app" };
   return { factory: vm.runInNewContext(harness, { console }), React, location };
@@ -135,6 +135,9 @@ function makeModule(fetchImpl) {
   A(fallbackErrors.length === 1, "blocked playlist expansion returns a non-fatal warning");
   A(fallbackAlbums[0].media.length === 1 && fallbackAlbums[0].media[0].platform === "youtube-playlist", "blocked playlist remains visible as one playable item");
   A(MBlocked.videoEmbed(fallbackAlbums[0].media[0]).includes("youtube.com/embed/videoseries?list=PLfallback"), "playlist fallback opens the YouTube playlist player");
+  const playerItems = M.playlistEntriesFromIds(["AAA111aaaaa", "BBB222bbbbb", "AAA111aaaaa", "bad"], "Topp Talks");
+  A(playerItems.length === 2, "player fallback converts and deduplicates playlist video ids");
+  A(playerItems[1].label === "Topp Talks · คลิป 2", "player fallback gives each clip a useful ordered label");
 
   section("tiktok oEmbed enrichment (mocked)");
   const tkFetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ thumbnail_url: "https://tk/thumb.jpg" }) });
@@ -163,6 +166,8 @@ function makeModule(fetchImpl) {
   A(M.heroStageAnchor(4, 5) === 66, "the last cover shifts right to reveal previous covers");
   A(source.includes("anchor + off * 28"), "hero cards share the edge-aware stage anchor");
   A(source.includes("Math.min(0.72, 0.5"), "adjacent covers use a clear progressive fade");
+  A(source.includes('script.src = "https://www.youtube.com/iframe_api"'), "playlist recovery uses the official YouTube IFrame API");
+  A(source.includes('objectFit: isVideo ? "cover" : "contain"'), "video thumbnails fill their 16:9 frame");
 
   console.log(`\n${fail ? "❌" : "✅"} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
