@@ -1,55 +1,62 @@
-# Design QA — Hero edge preview
+# Design QA — Sticky filter stacking and circular Hero navigation
 
 ## Comparison target
 
-- Source visual truth: `/workspace/scratch/a41de38878e4/upload/01-Screenshot-2569-08-05-at-23.34.11.png`, 2048 × 896 px. The first cover is centered, leaving a large unused area on the left, and only one adjacent cover is clearly discoverable.
-- Implementation: `https://joohiki-a11y.github.io/Bitkub_gallery/?qa=hero-fa52f293` at commit `fa52f293d2a6b7c895c4134ca9bf063c3cf8d916`.
-- Browser-rendered implementation screenshot: inline Cloud Browser capture from the implementation URL. The browser runtime did not expose a workspace path for the PNG.
+- Source visual truth: `/workspace/scratch/a41de38878e4/upload/01-Screenshot-2569-08-06-at-16.59.27.png`, 2048 × 631 px.
+- Browser-rendered implementation screenshot: `/workspace/scratch/hero-sticky-fixed-1786010962146.jpg`, 1363 × 936 px.
+- Combined comparison input: `/workspace/scratch/qa-sticky-comparison-1786010962146.jpg`.
+- Implementation URL: `http://terminal.local:4173/`.
 - Browser viewport: 1363 × 936 CSS px, device pixel ratio 1.
-- State: desktop, All filter, first Hero work (`Noong Doi`) selected.
-- Density normalization: the source and implementation have different desktop widths. The comparison used normalized stage proportions, visible-card count, fade progression, image fidelity, spacing rhythm, and the same first-slide state rather than pixel-for-pixel coordinates.
+- State: desktop, All filter, `Noong Doi` selected, page scrolled to 294 px so the sticky filter overlaps the Hero stage region.
+- Density normalization: both captures were compared at 1363 px width. The source's very wide viewport was proportionally scaled and centered on a white 1363 × 936 canvas; layout and stacking were judged in the shared top-bar/Hero region rather than by unrelated vertical content.
 
 ## Full-view comparison evidence
 
-- Source and implementation were opened together in one comparison input before this report was written.
-- The active first cover moved from the 50% stage center to the edge-aware 34% anchor, reducing the unused left region while preserving comfortable outer padding.
-- Two upcoming covers are now visible in the opening frame. The nearest preview uses a 0.50 neutral wash and the second preview uses a 0.68 wash, forming a clear progressive affordance for horizontal navigation.
-- Existing typography, category navigation, title/meta hierarchy, original image proportions, radii, shadows, and brand colors remain unchanged.
+- The source shows the active Hero card painting over the sticky category bar. In the revised browser capture, the bar remains fully opaque and readable while the Hero begins beneath it.
+- The active card remains centered and retains the existing image ratio, radius, shadow, title, metadata, and navigation controls.
+- Circular navigation adds a subdued previous-card preview to the left of the first work and keeps the existing next-card preview on the right, making the loop discoverable without changing the visual language.
 
 ## Focused comparison evidence
 
-- At 1363 px viewport width, the first card measured x 200–716 px with center x 458 px; the stage center was x 674 px. The second card measured x 619–1052 px and the third x 1110–1317 px.
-- Selecting the next work changed the title to `Awards` and returned its card center to x 674 px, exactly matching the stage center. Returning to the first work restored the edge-biased layout.
-- A separate close-up was not required because the requested change concerns full-stage composition and the full-view capture makes all cards, fades, labels, and controls readable.
+- At scrollY 294, the sticky navigation measured top 0 px, bottom 64 px, computed z-index 60.
+- The Hero stage measured top 33.19 px, bottom 513.19 px, so both regions intentionally overlap between y=33.19–64 px. `document.elementFromPoint(innerWidth / 2, 32)` resolved to a category button inside the navigation, confirming the bar owns the top layer.
+- The Hero stage computed `isolation: isolate`, preventing card-level z-index values from escaping above the sticky navigation.
+- A separate close-up was unnecessary because the full browser capture clearly shows the bar boundary, active card, both adjacent previews, and navigation controls.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: passed. Quicksand/Mitr hierarchy, weights, line heights, and small metadata remain consistent with the existing design.
-- Spacing and layout rhythm: passed. The opening frame is denser without crowding; the first cover retains a 200 px outer margin at the tested viewport and the preview sequence remains evenly spaced.
-- Colors and visual tokens: passed. The progressive fade uses the existing neutral `#f7f7f7` overlay; no new color language was introduced.
-- Image quality and asset fidelity: passed. Original gallery assets, crops, aspect ratios, responsive Cloudinary previews, radii, and shadows are preserved.
-- Copy and content: passed. No visible copy changed; the selected title and metadata continue to track the active work.
-- Accessibility and interaction: passed for this scope. The Hero remains a labelled carousel, adjacent cards remain keyboard-addressable, arrow navigation works, and fractional touchpad movement shares the same smoothly interpolated anchor.
+- Fonts and typography: passed. Quicksand/Mitr families, weights, wrapping, hierarchy, and metadata sizing are unchanged.
+- Spacing and layout rhythm: passed. Hero height, card footprint, radii, shadows, title spacing, control spacing, and grid transition remain consistent; only the stacking context changed.
+- Colors and visual tokens: passed. Existing `#f4f4f4`, green accent, white pill controls, and neutral preview fade remain unchanged.
+- Image quality and asset fidelity: passed. Existing source assets, proportions, responsive previews, and containment behavior are preserved.
+- Copy and content: passed. No gallery copy or data changed.
+- Accessibility and interaction: passed. The category navigation remains keyboard-accessible; Hero buttons, touch swipe, horizontal touchpad movement, and arrow navigation now share circular position logic.
 
-## Interaction and runtime checks
+## Primary interactions tested
 
-- `node Test/gallery.test.js`: 43 passed, 0 failed.
-- `git diff --check`: passed.
-- First-slide edge anchor: 34%; single-item filter fallback: 50%; final-slide mirror anchor: 66%.
-- Next arrow: `Noong Doi` → `Awards`; active card centered after transition.
-- Previous arrow: `Awards` → `Noong Doi`; edge preview restored.
-- Console checked: no new Hero layout or interaction errors. The existing YouTube Data API HTTP-referrer restriction still logs playlist-fetch errors; browser-extension metadata errors are unrelated to the site.
+- Hero previous from first: `Noong Doi` → final filtered work.
+- Hero next from final: final filtered work → `Noong Doi`.
+- Album media Lightbox previous from first: `1 / 7` → `7 / 7`.
+- Album media Lightbox next from last: `7 / 7` → `1 / 7`.
+- Sticky navigation at the overlap point remained the top hit target and fully readable.
+- Console checked. No errors were introduced by the stacking or loop changes. Existing YouTube Data API referrer warnings on `terminal.local` fall back through the player-based playlist loader; browser-extension metadata errors are outside the site.
 
 ## Comparison history
 
-1. Initial source showed the active first card centered, a large empty left area, and one subdued adjacent preview.
-2. Fix: introduced an edge-aware stage anchor that shifts only the first/last positions and interpolates with fractional touchpad movement.
-3. Fix: increased and progressively stepped the neutral wash on upcoming covers so the scroll affordance is visible without competing with the active work.
-4. Post-fix browser evidence confirmed two upcoming covers in the first frame, exact center alignment from the second work onward, and no actionable P0/P1/P2 regression.
+1. P1 source finding: Hero cards shared z-index 30 with the sticky navigation and could paint over the filter bar.
+2. Fix: raised the sticky navigation to z-index 60 and isolated the Hero stacking context.
+3. Post-fix evidence: at an intentional 31 px overlap, the top hit target remained inside the navigation and the browser capture showed no image over the bar.
+4. P1 interaction finding: Hero arrows and gestures clamped positions to the first and last items.
+5. Fix: added normalized circular positions and shortest circular offsets for arrow, touch, and touchpad navigation.
+6. Post-fix evidence: first/last navigation looped in both directions; the album media Lightbox also looped 1/7 ↔ 7/7.
+
+## Validation
+
+- `node Test/gallery.test.js`: 59 passed, 0 failed.
+- `git diff --check`: passed.
 
 ## Follow-up polish
 
-- P3: verify the perceived preview fade on a physical wide-gamut display; opacity can be tuned without changing the layout behavior.
-- External configuration: update the YouTube Data API key HTTP-referrer allowlist for `https://joohiki-a11y.github.io/*` to remove the existing playlist warning.
+- P3: the far-side Hero preview for an item without a usable cover continues to use the existing neutral video fallback tile; this is intentional and not part of the stacking/loop fix.
 
 final result: passed

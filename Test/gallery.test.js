@@ -38,7 +38,7 @@ function loadModule() {
     inner +
     " return { parseVideo, videoItem, videoEmbed, videoThumb, buildAlbums, gvizToObjects, " +
     "buildTabs, expandPlaylists, enrichThumbs, flattenSpread, ytId, playlistId, splitList, " +
-    "imageVariant, imageSrcSet, heroStageAnchor, playlistEntriesFromIds }; })";
+    "imageVariant, imageSrcSet, heroStageAnchor, wrapCarouselPosition, circularTrackpadPosition, circularCarouselOffset, playlistEntriesFromIds }; })";
   const React = { useState: () => [], useEffect: () => {}, useRef: () => ({}), Fragment: 0, createElement: () => ({}) };
   const location = { protocol: "https:", origin: "https://example.netlify.app" };
   return { factory: vm.runInNewContext(harness, { console }), React, location };
@@ -166,6 +166,15 @@ function makeModule(fetchImpl) {
   A(M.heroStageAnchor(4, 5) === 66, "the last cover shifts right to reveal previous covers");
   A(source.includes("anchor + off * 28"), "hero cards share the edge-aware stage anchor");
   A(source.includes("Math.min(0.72, 0.5"), "adjacent covers use a clear progressive fade");
+  A(M.wrapCarouselPosition(-1, 5) === 4, "hero previous navigation loops from first to last");
+  A(M.wrapCarouselPosition(5, 5) === 0, "hero next navigation loops from last to first");
+  A(M.circularCarouselOffset(4, 0, 5) === -1, "last Hero card is the previous neighbour of the first");
+  A(M.circularCarouselOffset(0, 4, 5) === 1, "first Hero card is the next neighbour of the last");
+  A(M.circularTrackpadPosition(4.8, 110, 5) < 1, "trackpad movement wraps continuously across the Hero boundary");
+  A((source.match(/circularTrackpadPosition\(/g) || []).length >= 3, "touch and trackpad Hero gestures both use circular movement");
+  A(source.includes('const heroAnchor = 50'), "looped Hero keeps the active card centered between two previews");
+  A(source.includes('zIndex: 60'), "sticky filter bar stays above Hero cards while scrolling");
+  A(source.includes('isolation: "isolate"'), "Hero card stacking is isolated beneath the sticky filter bar");
   A(source.includes('script.src = "https://www.youtube.com/iframe_api"'), "playlist recovery uses the official YouTube IFrame API");
   A(source.includes('objectFit: isVideo ? "cover" : "contain"'), "video thumbnails fill their 16:9 frame");
 

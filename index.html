@@ -932,6 +932,27 @@
     return Math.min(length - 1, Math.max(0, current + delta / pixelsPerItem));
   }
 
+  // Keep the Hero carousel circular. Fractional positions are preserved so
+  // trackpad/touch movement stays directly under the user's fingers while the
+  // first and last works remain neighbours.
+  function wrapCarouselPosition(position, length) {
+    if (length <= 1) return 0;
+    return ((position % length) + length) % length;
+  }
+
+  function circularTrackpadPosition(current, delta, length, pixelsPerItem = CONFIG.GESTURE.HERO_PIXELS_PER_ITEM) {
+    return wrapCarouselPosition(current + delta / pixelsPerItem, length);
+  }
+
+  function circularCarouselOffset(index, center, length) {
+    if (length <= 1) return 0;
+    let offset = index - wrapCarouselPosition(center, length);
+    const half = length / 2;
+    if (offset > half) offset -= length;
+    if (offset < -half) offset += length;
+    return offset;
+  }
+
   function trackpadSteps(travel, delta, threshold = CONFIG.GESTURE.LIGHTBOX_PIXELS_PER_ITEM) {
     const total = travel + delta;
     const steps = Math.max(-4, Math.min(4, Math.trunc(total / threshold)));
@@ -1065,22 +1086,22 @@
     const filtered = data.filter(matches);
     const len = filtered.length;
 
-    // Clamp center whenever the filtered list shrinks.
-    let curCenter = center;
-    if (curCenter > len - 1) curCenter = Math.max(0, len - 1);
-    if (curCenter < 0) curCenter = 0;
+    // Normalize instead of clamping so the first and last Hero cards remain
+    // adjacent and every navigation method can loop continuously.
+    const curCenter = wrapCarouselPosition(center, len);
 
     const album = data.find((d) => d.id === openAlbumId) || null;
 
     const selectTab = (key) => { setActive(key); centerRef.current = 0; setCenter(0); setTrackpadActive(false); };
     const goTo = (index) => {
-      centerRef.current = index;
+      const next = wrapCarouselPosition(index, len);
+      centerRef.current = next;
       setTrackpadActive(false);
-      setCenter(index);
+      setCenter(next);
     };
     const step = (dir) => setCenter((c) => {
       const l = data.filter(matches).length;
-      const next = Math.min(l - 1, Math.max(0, Math.round(c) + dir));
+      const next = wrapCarouselPosition(Math.round(c) + dir, l);
       centerRef.current = next;
       setTrackpadActive(false);
       return next;
@@ -1123,7 +1144,7 @@
     useEffect(() => () => { document.body.style.overflow = ""; }, []);
     useEffect(() => {
       setCenter((c) => {
-        const next = Math.min(Math.max(0, len - 1), Math.max(0, c));
+        const next = wrapCarouselPosition(c, len);
         centerRef.current = next;
         return next;
       });
@@ -1145,7 +1166,7 @@
       if (!state.axis) state.axis = gestureAxis(dx, dy);
       if (state.axis !== "horizontal") return;
       e.preventDefault();
-      const next = trackpadPosition(state.startCenter, dx, len);
+      const next = circularTrackpadPosition(state.startCenter, dx, len);
       centerRef.current = next;
       setTrackpadActive(true);
       setCenter(next);
@@ -1169,7 +1190,7 @@
         if (!dx) return;
         e.preventDefault();
         setTrackpadActive(true);
-        centerRef.current = trackpadPosition(centerRef.current, dx, len);
+        centerRef.current = circularTrackpadPosition(centerRef.current, dx, len);
         if (!wheelFrameRef.current) {
           wheelFrameRef.current = requestAnimationFrame(() => {
             wheelFrameRef.current = 0;
@@ -1178,7 +1199,7 @@
         }
         clearTimeout(snapTimer);
         snapTimer = setTimeout(() => {
-          const snapped = Math.round(centerRef.current);
+          const snapped = wrapCarouselPosition(Math.round(centerRef.current), len);
           centerRef.current = snapped;
           setTrackpadActive(false);
           setCenter(snapped);
@@ -1193,8 +1214,10 @@
       };
     }, [len, active]);
 
-    const activeIndex = Math.min(Math.max(0, len - 1), Math.round(curCenter));
-    const heroAnchor = heroStageAnchor(curCenter, len);
+    const activeIndex = wrapCarouselPosition(Math.round(curCenter), len);
+    // A loop has neighbours on both sides, so the active card stays centered
+    // and the adjacent faded cards clearly advertise horizontal navigation.
+    const heroAnchor = 50;
     const ac = filtered[activeIndex];
     const activeTitle = ac ? ac.title : "";
     const activeMeta = ac ? `${ac.category} · ${ac.client} · ${ac.media.length} รายการ` : "";
@@ -1213,7 +1236,7 @@
         </header>
 
         ${/* ---- SINGLE STICKY FILTER (visible before Hero and while browsing) */""}
-        <nav aria-label="กรองผลงานตามหมวดหมู่" style=${{ position: "sticky", top: 0, zIndex: 30, background: "rgba(244,244,244,0.96)", borderTop: "1px solid #e6e6e6", borderBottom: "1px solid #e6e6e6", display: "flex", alignItems: "center", gap: "clamp(12px,2vw,24px)", padding: "10px clamp(16px,5vw,64px)", backdropFilter: "blur(12px)" }}>
+        <nav aria-label="กรองผลงานตามหมวดหมู่" style=${{ position: "sticky", top: 0, zIndex: 60, background: "rgba(244,244,244,0.96)", borderTop: "1px solid #e6e6e6", borderBottom: "1px solid #e6e6e6", display: "flex", alignItems: "center", gap: "clamp(12px,2vw,24px)", padding: "10px clamp(16px,5vw,64px)", backdropFilter: "blur(12px)" }}>
           <div style=${{ display: "flex", alignItems: "baseline", gap: "9px", flex: "none" }}>
             <span style=${{ fontSize: "12px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#666", fontWeight: 600 }}>Albums</span>
             <span aria-live="polite" style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 700, fontSize: "16px", color: "#007339" }}>${len}</span>
@@ -1234,9 +1257,9 @@
           <${Fragment}>
             <section ref=${stageRef} data-testid="hero-carousel" onTouchStart=${swipeStart} onTouchMove=${swipeMove} onTouchEnd=${swipeEnd} onTouchCancel=${swipeEnd}
               role="region" aria-roledescription="carousel" aria-label="ผลงานแนะนำ ปัดนิ้วบนหน้าจอหรือปัดสองนิ้วบนทัชแพดเพื่อเลื่อน"
-              style=${{ position: "relative", height: "clamp(300px,42vw,480px)", margin: "clamp(28px,4vh,52px) 0 clamp(8px,2vh,18px)", overflow: "hidden", touchAction: "pan-y pinch-zoom", overscrollBehaviorX: "contain" }}>
+              style=${{ position: "relative", isolation: "isolate", height: "clamp(300px,42vw,480px)", margin: "clamp(28px,4vh,52px) 0 clamp(8px,2vh,18px)", overflow: "hidden", touchAction: "pan-y pinch-zoom", overscrollBehaviorX: "contain" }}>
               ${filtered.map((d, i) => {
-                const off = i - curCenter;
+                const off = circularCarouselOffset(i, curCenter, len);
                 const abs = Math.abs(off);
                 // Keep a small invisible buffer for continuous movement.
                 if (abs > 3.5) return null;
