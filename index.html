@@ -200,7 +200,7 @@
     return /^(yes|true|1|y|on|ใช่|✓)$/i.test((s || "").trim());
   }
 
-  const PLATFORM_NAME = { youtube: "YouTube", tiktok: "TikTok", facebook: "Facebook" };
+  const PLATFORM_NAME = { youtube: "YouTube", "youtube-playlist": "YouTube Playlist", tiktok: "TikTok", facebook: "Facebook" };
 
   // Detect the platform + reference from a video link (or a bare YouTube id).
   function parseVideo(input) {
@@ -233,6 +233,16 @@
     return { type: "video", platform: v.platform, vid: v.vid, vurl: v.vurl, mtype: mtype || "video", label: label || "", src: "", full: "" };
   }
 
+  // Keep a playlist playable even when the Data API cannot expand it into
+  // individual clips (for example when an API-key referrer rule is wrong).
+  function playlistVideoItem(pid, mtype, label) {
+    return {
+      type: "video", platform: "youtube-playlist", vid: pid,
+      vurl: `https://www.youtube.com/playlist?list=${encodeURIComponent(pid)}`,
+      mtype: mtype || "video", label: label || "YouTube Playlist", src: "", full: "",
+    };
+  }
+
   // Thumbnail URL for a video item. A fetched thumbnail (e.g. TikTok oEmbed)
   // wins; otherwise only YouTube exposes one directly.
   function videoThumb(m, res) {
@@ -247,6 +257,10 @@
     if (m.platform === "youtube") {
       const originParam = /^https?:$/.test(location.protocol) ? `&origin=${encodeURIComponent(location.origin)}` : "";
       return m.vid ? `https://www.youtube.com/embed/${m.vid}?rel=0&modestbranding=1&playsinline=1&autoplay=1${originParam}` : "";
+    }
+    if (m.platform === "youtube-playlist") {
+      const originParam = /^https?:$/.test(location.protocol) ? `&origin=${encodeURIComponent(location.origin)}` : "";
+      return m.vid ? `https://www.youtube.com/embed/videoseries?list=${encodeURIComponent(m.vid)}&rel=0&modestbranding=1&playsinline=1${originParam}` : "";
     }
     return "";
   }
@@ -455,26 +469,32 @@
     const errors = [];
     const ids = [...new Set(albums.flatMap((a) => a.playlists || []))];
     if (!ids.length) return errors;
-    if (!CONFIG.YT_API_KEY) {
-      errors.push('มีคอลัมน์ playlist แต่ยังไม่ได้ตั้งค่า YT_API_KEY ในไฟล์');
-      return errors;
-    }
     const byId = {};
-    await runPool(ids, 4, async (pid) => {
-      try { byId[pid] = await fetchPlaylistItems(pid, CONFIG.YT_API_KEY); }
-      catch (e) {
-        console.error("[gallery] playlist fetch failed:", pid, e);
-        byId[pid] = null;
-        errors.push(`เพลย์ลิสต์ ${pid}: ${e && e.message ? e.message : String(e)}`);
-      }
-    });
+    if (!CONFIG.YT_API_KEY) {
+      ids.forEach((pid) => { byId[pid] = null; });
+      errors.push('ไม่สามารถแยกคลิปใน Playlist ได้ — ระบบจะแสดงเป็น Playlist ที่กดเล่นได้แทน');
+    } else {
+      let failedCount = 0;
+      await runPool(ids, 4, async (pid) => {
+        try { byId[pid] = await fetchPlaylistItems(pid, CONFIG.YT_API_KEY); }
+        catch (e) {
+          console.error("[gallery] playlist fetch failed:", pid, e);
+          byId[pid] = null;
+          failedCount++;
+        }
+      });
+      if (failedCount) errors.push(`${failedCount} Playlist แสดงแบบรวม เนื่องจากไม่สามารถโหลดรายการคลิปแยกได้`);
+    }
     for (const a of albums) {
       for (const pid of (a.playlists || [])) {
         const items = byId[pid];
-        if (!Array.isArray(items)) continue;
         const mtype = a.category.toLowerCase() || "video";
-        for (const it of items) {
-          a.media.push({ type: "video", platform: "youtube", vid: it.yt, vurl: `https://www.youtube.com/watch?v=${it.yt}`, mtype, label: it.label || "", src: "", full: "" });
+        if (!Array.isArray(items)) {
+          a.media.push(playlistVideoItem(pid, mtype, a.title || "YouTube Playlist"));
+        } else {
+          for (const it of items) {
+            a.media.push({ type: "video", platform: "youtube", vid: it.yt, vurl: `https://www.youtube.com/watch?v=${it.yt}`, mtype, label: it.label || "", src: "", full: "" });
+          }
         }
       }
       if (!a.cover && a.media.length) {

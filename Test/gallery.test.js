@@ -126,6 +126,16 @@ function makeModule(fetchImpl) {
   A(errs.length === 0, "playlist fetch: no errors");
   A(pa[0].media.length === 1 && pa[0].media[0].vid === "PL1aaaaaaaa", "playlist expanded (Private skipped)");
 
+  section("playlist fallback when YouTube Data API rejects the request");
+  const blockedFetch = () => Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: { message: "Requests from referer are blocked." } }) });
+  const MBlocked = makeModule(blockedFetch);
+  const fallbackAlbums = MBlocked.buildAlbums(MBlocked.gvizToObjects({ cols: [{ label: "album_id" }, { label: "category" }, { label: "title" }, { label: "playlist" }],
+    rows: [{ c: [{ v: "pf" }, { v: "TJ Content" }, { v: "รายการตัวอย่าง" }, { v: "https://youtube.com/playlist?list=PLfallback" }] }] }), []);
+  const fallbackErrors = await MBlocked.expandPlaylists(fallbackAlbums);
+  A(fallbackErrors.length === 1, "blocked playlist expansion returns a non-fatal warning");
+  A(fallbackAlbums[0].media.length === 1 && fallbackAlbums[0].media[0].platform === "youtube-playlist", "blocked playlist remains visible as one playable item");
+  A(MBlocked.videoEmbed(fallbackAlbums[0].media[0]).includes("youtube.com/embed/videoseries?list=PLfallback"), "playlist fallback opens the YouTube playlist player");
+
   section("tiktok oEmbed enrichment (mocked)");
   const tkFetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ thumbnail_url: "https://tk/thumb.jpg" }) });
   const M3 = makeModule(tkFetch);
