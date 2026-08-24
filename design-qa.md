@@ -1,71 +1,46 @@
-# Design QA — Bitkub Brand Background
+# Design QA — Crisp Bitkub Brand Background
 
 ## Evidence
 
-- Source visual truth: `/workspace/scratch/a41de38878e4/generated_images/exec-6a3bee79-6f25-49ca-bbf4-ce7f863d5371.png`
-- Desktop implementation: `/workspace/scratch/a41de38878e4/repo-bg/design-qa-desktop.png`
-- Mobile implementation: `/workspace/scratch/a41de38878e4/repo-bg/design-qa-mobile.png`
-- Desktop comparison: `/workspace/scratch/a41de38878e4/repo-bg/design-qa-comparison.png`
-- Mobile background comparison: `/workspace/scratch/a41de38878e4/repo-bg/design-qa-mobile-comparison.png`
-
-## Viewports and normalization
-
-- Source mockup: 1487 × 1058 px; normalized with a centered crop to 1348 × 926 px for the desktop comparison.
-- Desktop browser viewport: 1363 × 936 CSS px at device scale 1; browser-rendered screenshot: 1348 × 926 px.
-- Mobile browser state: the live page was rendered inside a 390 × 844 CSS px iframe in the same Cloud Browser; screenshot: 390 × 844 px. The page client width was 375 px because the iframe reserved its vertical scrollbar.
-- Mobile background source asset: 1024 × 1536 px; cropped to 390 × 844 px for the responsive background comparison.
-- State: light theme, `All` filter selected, gallery data loaded, Hero visible. The source mockup uses illustrative content while the implementation deliberately preserves the live gallery content and existing layout; the comparison judges only the approved background treatment.
-
-## Full-view comparison evidence
-
-- Desktop: the implementation reproduces the approved #F4F4F4 surface, soft green upper-left glow, sparse gray/green construction lines at the outer edges, and a clean central content zone. Photography remains visually dominant.
-- Mobile: the portrait asset is materially calmer than desktop, keeps the center column clean, loads at the 720 px breakpoint, and introduces no horizontal overflow (`scrollWidth === clientWidth`).
-- Sticky navigation remains readable over the background with its existing translucent #F4F4F4 surface and blur.
-
-## Focused region comparison
-
-No additional crop was required. The only changed visual surface is the full-page background, and its line density, glow distribution, content contrast, and edge behavior are all legible in the full desktop and mobile comparisons.
-
-## Required fidelity surfaces
-
-- Fonts and typography: unchanged from the live site. Quicksand/Mitr hierarchy, weights, wrapping, and antialiasing remain intact and readable over the new background.
-- Spacing and layout rhythm: unchanged. Header, sticky filter, Hero, gallery grid, cards, and footer preserve their current measurements and alignment.
-- Colors and visual tokens: approved Bitkub green glow and low-opacity green/gray construction language are present without reducing text contrast. The white/translucent component surfaces remain consistent.
-- Image quality and asset fidelity: the decorative background is a generated raster asset, not CSS-drawn geometry. Desktop and mobile WebP files are sharp, seamless at cover scale, and total under 20 KB combined.
-- Copy and content: unchanged. No subtitle, invented navigation item, or replacement gallery data was introduced.
+- Source visual truth: `/workspace/scratch/a41de38878e4/generated_images/exec-c6d9a34d-77b9-488c-a4ac-eeab3dfcf334.png`
+- Mobile source visual truth: `/workspace/scratch/a41de38878e4/generated_images/exec-110df303-409d-48aa-be02-6ed6da32914b.png`
+- Browser-rendered implementation: `/workspace/scratch/bitkub-bg-clean-desktop.jpg`
+- Side-by-side comparison: `/workspace/scratch/a41de38878e4/repo-bg/design-qa-comparison.jpg`
+- Desktop viewport: 1363 × 936 CSS px, device pixel ratio 1; screenshot 1348 × 926 px after scrollbar/chrome exclusion.
+- Mobile check: 390 × 844 CSS px in a responsive iframe, device pixel ratio 1.
+- Source pixels: desktop 1672 × 941 and mobile 941 × 1672. Production assets are exported at 1920 × 1080 / 3840 × 2160 and 1080 × 1920 / 2160 × 3840, selected with CSS `image-set()` at 1x and 2x.
+- Density normalization: the desktop source was center-cropped and resized to 1348 × 926 before being placed beside the 1348 × 926 implementation screenshot.
+- State: gallery loaded, first Hero album active, sticky category navigation visible.
 
 ## Findings
 
-- No actionable P0, P1, or P2 issues.
-- [P3] The responsive mobile treatment intentionally removes most construction detail compared with desktop. This is acceptable because it protects readability and keeps the Hero photography dominant on narrow screens.
+- No actionable P0, P1, or P2 differences remain.
+- Fonts and typography: unchanged from the accepted gallery implementation; the background keeps sufficient contrast behind the logo, title, tabs, and metadata.
+- Spacing and layout rhythm: the clean center field preserves the existing Hero hierarchy and does not add visual weight behind cards or controls.
+- Colors and visual tokens: the neutral `#f4f4f4` base, restrained Bitkub green glow, and low-opacity construction lines follow the supplied CI direction.
+- Image quality and asset fidelity: geometry is single-stroke and clean, with no visible doubled lines, grain, compression blocks, texture seams, or AI-style halos. Retina assets are available for both desktop and mobile.
+- Copy and content: no copy changed.
 
-## Primary interactions tested
+## Responsive and Interaction Checks
 
-- Hero next navigation changes the active project.
-- Category filter updates `aria-pressed` and filters the gallery.
-- Album card opens its modal.
-- Media thumbnail opens the Lightbox.
-- Lightbox next navigation advances from `1 / 21` to `2 / 21`.
-- Sticky filter remains at viewport top with z-index 60 after scrolling.
-- Desktop and mobile layouts have no horizontal page overflow.
+- Desktop computed style resolves to the clean desktop `image-set()` with `cover`, centered at the top.
+- Mobile computed style resolves to the portrait clean `image-set()` at 390 px width.
+- Hero next navigation and the All filter remained visible and operable.
+- 68 automated checks passed, including the four 1x/2x background assets and responsive image selection.
+- Console errors checked. Only the known YouTube playlist referrer rejection and the browser extension metadata error appeared; the existing playlist fallback remains active and neither error is caused by this background change.
 
-## Console review
+## Comparison History
 
-- No new runtime error attributable to the background change.
-- The known YouTube Data API referrer rejection still appears on the local preview; the existing playlist fallback continues to keep those works visible.
-- One browser-extension metadata error is external to the page.
+- Initial source issue: the previous 1672 × 941 background was compressed to about 8 KB, then enlarged on high-density screens. Visible symptoms included softened edges, doubled construction lines, grain, and uneven AI-generated intersections.
+- Fix: regenerated the decorative artwork with a flat clean field and precise sparse geometry, exported dedicated desktop/mobile 1x and 2x WebP files, and selected them by device pixel ratio with CSS `image-set()`.
+- Post-fix evidence: the side-by-side comparison shows the clean source treatment retained behind the live Hero and navigation, with crisp lines and no new layout interference.
 
-## Comparison history
+## Focused Region Comparison
 
-- Pass 1: no P0/P1/P2 mismatch found, so no design-QA correction loop was required.
+The top-left glow/diagonal intersection and the right-side vertical/circle construction marks were inspected at full asset resolution. No additional crop was needed because these are the only high-detail decorative regions; the center is intentionally blank.
 
-## Implementation checklist
+## Follow-up Polish
 
-- [x] Add approved desktop background asset.
-- [x] Add calmer portrait mobile asset.
-- [x] Keep application surface transparent so the fixed raster background remains visible.
-- [x] Preserve existing sticky navigation, Hero, gallery, modal, and Lightbox behavior.
-- [x] Verify desktop and mobile rendering in Cloud Browser.
-- [x] Run automated tests.
+- P3: after reviewing on a physical Retina phone, line opacity can be adjusted by a few percent if the CI marks feel too quiet or too prominent under local display calibration.
 
 final result: passed

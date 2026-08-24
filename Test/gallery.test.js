@@ -181,8 +181,11 @@ function makeModule(fetchImpl) {
   A(source.includes('objectFit: isVideo ? "cover" : "contain"'), "video thumbnails fill their 16:9 frame");
 
   section("responsive brand background");
-  A(source.includes('url("assets/brand-construction-bg.webp")'), "desktop uses the approved construction-grid background asset");
-  A(source.includes('url("assets/brand-construction-bg-mobile.webp")'), "mobile uses a calmer portrait background asset");
+  A(source.includes('url("assets/brand-construction-bg-clean-1x.webp")'), "desktop uses the clean construction-grid background asset");
+  A(source.includes('url("assets/brand-construction-bg-clean-2x.webp") 2x'), "desktop provides a crisp Retina background asset");
+  A(source.includes('url("assets/brand-construction-bg-mobile-clean-1x.webp")'), "mobile uses the clean portrait background asset");
+  A(source.includes('url("assets/brand-construction-bg-mobile-clean-2x.webp") 2x'), "mobile provides a crisp Retina background asset");
+  A((source.match(/background-image: image-set\(/g) || []).length === 2, "desktop and mobile select background resolution by device pixel ratio");
   A(source.includes('body::before'), "background remains fixed behind the scrolling gallery");
   A(source.includes('background: "transparent", minHeight: "100vh"'), "the gallery surface reveals the branded background");
 

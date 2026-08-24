@@ -27,12 +27,24 @@
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    background: #f4f4f4 url("assets/brand-construction-bg.webp") center top / cover no-repeat;
+    background-color: #f4f4f4;
+    background-image: url("assets/brand-construction-bg-clean-1x.webp");
+    background-image: image-set(
+      url("assets/brand-construction-bg-clean-1x.webp") 1x,
+      url("assets/brand-construction-bg-clean-2x.webp") 2x
+    );
+    background-position: center top;
+    background-size: cover;
+    background-repeat: no-repeat;
   }
   #root { position: relative; z-index: 1; min-height: 100vh; }
   @media (max-width: 720px) {
     body::before {
-      background-image: url("assets/brand-construction-bg-mobile.webp");
+      background-image: url("assets/brand-construction-bg-mobile-clean-1x.webp");
+      background-image: image-set(
+        url("assets/brand-construction-bg-mobile-clean-1x.webp") 1x,
+        url("assets/brand-construction-bg-mobile-clean-2x.webp") 2x
+      );
       background-position: center top;
     }
   }
