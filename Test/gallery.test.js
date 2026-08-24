@@ -149,6 +149,9 @@ function makeModule(fetchImpl) {
 
   section("UX round one safeguards");
   const source = fs.readFileSync(findHtml(), "utf8");
+  const sourceDir = path.dirname(path.resolve(findHtml()));
+  const desktopVector = fs.readFileSync(path.join(sourceDir, "assets", "brand-construction-bg.svg"), "utf8");
+  const mobileVector = fs.readFileSync(path.join(sourceDir, "assets", "brand-construction-bg-mobile.svg"), "utf8");
   A((source.match(/aria-label="กรองผลงานตามหมวดหมู่"/g) || []).length === 1, "only one category filter navigation is rendered");
   A(source.includes('aria-pressed=${on ? "true" : "false"}'), "filter buttons expose their selected state");
   A(source.includes('overflowX: "clip"'), "the page does not create an overflow ancestor that breaks sticky filters");
@@ -181,11 +184,12 @@ function makeModule(fetchImpl) {
   A(source.includes('objectFit: isVideo ? "cover" : "contain"'), "video thumbnails fill their 16:9 frame");
 
   section("responsive brand background");
-  A(source.includes('url("assets/brand-construction-bg-clean-1x.webp")'), "desktop uses the clean construction-grid background asset");
-  A(source.includes('url("assets/brand-construction-bg-clean-2x.webp") 2x'), "desktop provides a crisp Retina background asset");
-  A(source.includes('url("assets/brand-construction-bg-mobile-clean-1x.webp")'), "mobile uses the clean portrait background asset");
-  A(source.includes('url("assets/brand-construction-bg-mobile-clean-2x.webp") 2x'), "mobile provides a crisp Retina background asset");
-  A((source.match(/background-image: image-set\(/g) || []).length === 2, "desktop and mobile select background resolution by device pixel ratio");
+  A((source.match(/data:image\/svg\+xml;base64,/g) || []).length === 2, "desktop and mobile use embedded resolution-independent vector backgrounds");
+  A(source.includes('background-image: url("data:image/svg+xml;base64,'), "the vector background remains self-contained and browser-safe");
+  A(!source.includes('background-image: image-set('), "the active background no longer depends on raster density switching");
+  A(desktopVector.includes('shape-rendering="geometricPrecision"') && mobileVector.includes('shape-rendering="geometricPrecision"'), "both vector masters request precise geometric rendering");
+  A(desktopVector.includes('vector-effect="non-scaling-stroke"') && mobileVector.includes('vector-effect="non-scaling-stroke"'), "construction lines keep a stable stroke when scaled");
+  A(!desktopVector.includes("<image") && !mobileVector.includes("<image"), "the vector masters contain no embedded AI raster artwork");
   A(source.includes('body::before'), "background remains fixed behind the scrolling gallery");
   A(source.includes('background: "transparent", minHeight: "100vh"'), "the gallery surface reveals the branded background");
 
