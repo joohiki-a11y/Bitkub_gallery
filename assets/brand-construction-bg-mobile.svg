@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" preserveAspectRatio="xMidYMin slice">
   <defs>
     <radialGradient id="glowTop" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(80 90) rotate(35) scale(430 520)">
-      <stop stop-color="#A9F2BE" stop-opacity=".48"/>
-      <stop offset=".48" stop-color="#D7F8E0" stop-opacity=".22"/>
+      <stop stop-color="#A9F2BE" stop-opacity=".32"/>
+      <stop offset=".48" stop-color="#D7F8E0" stop-opacity=".14"/>
       <stop offset="1" stop-color="#F4F4F4" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="glowBottom" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1030 1720) rotate(-145) scale(520 650)">
-      <stop stop-color="#BCEFCB" stop-opacity=".38"/>
-      <stop offset=".52" stop-color="#E0F7E7" stop-opacity=".16"/>
+      <stop stop-color="#BCEFCB" stop-opacity=".24"/>
+      <stop offset=".52" stop-color="#E0F7E7" stop-opacity=".1"/>
       <stop offset="1" stop-color="#F4F4F4" stop-opacity="0"/>
     </radialGradient>
   </defs>
@@ -17,17 +17,14 @@
   <rect width="1080" height="1920" fill="url(#glowBottom)"/>
 
   <g fill="none" stroke-linecap="square" stroke-linejoin="miter" shape-rendering="geometricPrecision" vector-effect="non-scaling-stroke">
-    <g stroke="#8F9D97" stroke-width="1.25" opacity=".29">
-      <path d="M142 0V1920M930 0V1920"/>
+    <g stroke="#8F9D97" stroke-width="1.25" opacity=".17">
+      <path d="M930 0V1920"/>
       <path d="M-110 560 505-55M780 2020 1140 1120"/>
       <circle cx="1080" cy="1420" r="205"/>
     </g>
-    <g stroke="#45A96E" stroke-width="1.4" opacity=".25">
-      <path d="M-110 560 505-55M930 0V1920M780 2020 1140 1120"/>
+    <g stroke="#45A96E" stroke-width="1.4" opacity=".12">
+      <path d="M-110 560 505-55M780 2020 1140 1120"/>
       <circle cx="1080" cy="1420" r="205"/>
-    </g>
-    <g stroke="#97A39E" stroke-width=".8" opacity=".15" stroke-dasharray="3 6">
-      <path d="M126 0V1920M914 0V1920M946 0V1920"/>
     </g>
   </g>
 </svg>
