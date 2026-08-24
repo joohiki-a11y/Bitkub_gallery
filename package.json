@@ -1,0 +1,8 @@
+{
+  "name": "bitkub-production-gallery",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "test": "node Test/gallery.test.js"
+  }
+}

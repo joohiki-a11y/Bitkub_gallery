@@ -20,6 +20,22 @@
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #f4f4f4; }
+  body { min-height: 100vh; position: relative; }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: #f4f4f4 url("assets/brand-construction-bg.webp") center top / cover no-repeat;
+  }
+  #root { position: relative; z-index: 1; min-height: 100vh; }
+  @media (max-width: 720px) {
+    body::before {
+      background-image: url("assets/brand-construction-bg-mobile.webp");
+      background-position: center top;
+    }
+  }
   ::selection { background: #02D767; color: #ffffff; }
   @keyframes merFade  { from { opacity: 0; } to { opacity: 1; } }
   @keyframes merRise  { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
@@ -1227,7 +1243,7 @@
     const showStage = len > 0;
 
     return html`
-      <div style=${{ background: "#f4f4f4", minHeight: "100vh", color: "#262626", fontFamily: "'Quicksand','Mitr',sans-serif", WebkitFontSmoothing: "antialiased", overflowX: "clip" }}>
+      <div style=${{ background: "transparent", minHeight: "100vh", color: "#262626", fontFamily: "'Quicksand','Mitr',sans-serif", WebkitFontSmoothing: "antialiased", overflowX: "clip" }}>
 
         ${/* ---- NON-FATAL WARNING (e.g. a playlist that failed to load) ---- */""}
         ${warn && html`<${WarnBar} text=${warn} />`}

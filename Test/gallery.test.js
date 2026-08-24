@@ -180,6 +180,12 @@ function makeModule(fetchImpl) {
   A(source.includes('script.src = "https://www.youtube.com/iframe_api"'), "playlist recovery uses the official YouTube IFrame API");
   A(source.includes('objectFit: isVideo ? "cover" : "contain"'), "video thumbnails fill their 16:9 frame");
 
+  section("responsive brand background");
+  A(source.includes('url("assets/brand-construction-bg.webp")'), "desktop uses the approved construction-grid background asset");
+  A(source.includes('url("assets/brand-construction-bg-mobile.webp")'), "mobile uses a calmer portrait background asset");
+  A(source.includes('body::before'), "background remains fixed behind the scrolling gallery");
+  A(source.includes('background: "transparent", minHeight: "100vh"'), "the gallery surface reveals the branded background");
+
   console.log(`\n${fail ? "❌" : "✅"} ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
