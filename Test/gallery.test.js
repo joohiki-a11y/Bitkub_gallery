@@ -164,7 +164,7 @@ function makeModule(fetchImpl) {
   A(M.heroStageAnchor(0.5, 5) === 42, "the edge bias follows fractional touchpad movement");
   A(M.heroStageAnchor(1, 5) === 50, "middle covers return to the stage center");
   A(M.heroStageAnchor(4, 5) === 66, "the last cover shifts right to reveal previous covers");
-  A(source.includes("anchor + off * 28"), "hero cards share the edge-aware stage anchor");
+  A(source.includes("anchor + off * 30"), "hero previews have balanced horizontal spacing around the active card");
   A(source.includes("Math.min(0.72, 0.5"), "adjacent covers use a clear progressive fade");
   A(M.wrapCarouselPosition(-1, 5) === 4, "hero previous navigation loops from first to last");
   A(M.wrapCarouselPosition(5, 5) === 0, "hero next navigation loops from last to first");
@@ -175,6 +175,8 @@ function makeModule(fetchImpl) {
   A(source.includes('const heroAnchor = 50'), "looped Hero keeps the active card centered between two previews");
   A(source.includes('zIndex: 60'), "sticky filter bar stays above Hero cards while scrolling");
   A(source.includes('isolation: "isolate"'), "Hero card stacking is isolated beneath the sticky filter bar");
+  A(source.includes('clamp(320px, min(38vw, 48vh), 450px)'), "Hero height responds to both viewport width and height");
+  A(source.includes('fontSize: "clamp(34px,5vw,64px)"'), "page title keeps a compact responsive hierarchy");
   A(source.includes('script.src = "https://www.youtube.com/iframe_api"'), "playlist recovery uses the official YouTube IFrame API");
   A(source.includes('objectFit: isVideo ? "cover" : "contain"'), "video thumbnails fill their 16:9 frame");
 

@@ -32,6 +32,9 @@
     outline: 2px solid #02D767;
     outline-offset: 2px;
   }
+  @media (pointer: coarse) {
+    .mer-filter-strip button { min-height: 44px !important; }
+  }
   /* Visible keyboard focus for the coverflow cards (replaces outline:none). */
   .mer-cf:focus-visible { outline: 2px solid #02D767; outline-offset: 3px; }
   /* Isolate each masonry card without faking an off-screen height. */
@@ -1016,13 +1019,13 @@
     const [naturalRatio, setNaturalRatio] = useState(16 / 9);
     const naturalSize = !!album.cover && loaded && !failed;
     const edgeOpacity = Math.max(0, Math.min(1, 3 - abs));
-    const maxImageHeight = "calc(clamp(300px,42vw,480px) - 28px)";
+    const maxImageHeight = "calc(clamp(320px, min(38vw, 48vh), 450px) - 20px)";
     // Give portrait and landscape covers a comparable visual footprint while
     // preserving every source pixel. This prevents wide photos from feeling
     // several times larger than portrait photos in the same carousel.
-    const areaWidth = Math.sqrt(176000 * naturalRatio);
-    const availableHeight = Math.min(480, Math.max(300, window.innerWidth * 0.42)) - 28;
-    const targetWidth = Math.round(Math.min(areaWidth, availableHeight * naturalRatio, window.innerWidth * 0.78, 580));
+    const areaWidth = Math.sqrt(205000 * naturalRatio);
+    const availableHeight = Math.min(450, Math.max(320, Math.min(window.innerWidth * 0.38, window.innerHeight * 0.48))) - 20;
+    const targetWidth = Math.round(Math.min(areaWidth, availableHeight * naturalRatio, window.innerWidth * 0.84, 620));
     const coverPreview = imageVariant(album.cover, 1000);
     const coverSrcSet = imageSrcSet(album.cover, [480, 800, 1200]);
     const finishLoad = (e) => {
@@ -1045,7 +1048,7 @@
         aria-label=${isCenter ? `เปิด ${album.title}` : `เลื่อนไป ${album.title}`}
         onClick=${() => (isCenter ? onOpen() : onGoTo())}
         onKeyDown=${(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); isCenter ? onOpen() : onGoTo(); } }}
-        style=${{ position: "absolute", top: "50%", left: `${anchor + off * 28}%`, width: naturalSize ? "fit-content" : "clamp(260px,42vw,540px)", maxWidth: "min(78vw,580px)", aspectRatio: naturalSize ? undefined : "16 / 9",
+        style=${{ position: "absolute", top: "50%", left: `${anchor + off * 30}%`, width: naturalSize ? "fit-content" : "clamp(270px,44vw,600px)", maxWidth: "min(84vw,620px)", aspectRatio: naturalSize ? undefined : "16 / 9",
           borderRadius: "16px", overflow: "hidden", backgroundColor: "#eaeaea",
           transform: `translate(-50%, -50%) scale(${Math.max(0.64, 1 - abs * 0.16)})`,
           zIndex: String(30 - Math.round(abs)), opacity: edgeOpacity,
@@ -1054,7 +1057,7 @@
           cursor: "pointer", pointerEvents: abs >= 2.75 ? "none" : "auto", willChange: "transform, opacity", backfaceVisibility: "hidden" }}>
         ${album.cover && !failed
           ? html`<img src=${coverPreview} srcSet=${coverSrcSet || undefined} sizes="(max-width: 640px) 78vw, 580px" alt="" loading=${isCenter ? "eager" : "lazy"} decoding="async" onError=${failLoad} onLoad=${finishLoad}
-              style=${{ position: naturalSize ? "relative" : "absolute", inset: naturalSize ? undefined : 0, width: naturalSize ? `${targetWidth}px` : "100%", height: naturalSize ? "auto" : "100%", maxWidth: "min(78vw,580px)", maxHeight: maxImageHeight, objectFit: "contain", display: "block", opacity: loaded ? 1 : 0 }} />`
+              style=${{ position: naturalSize ? "relative" : "absolute", inset: naturalSize ? undefined : 0, width: naturalSize ? `${targetWidth}px` : "100%", height: naturalSize ? "auto" : "100%", maxWidth: "min(84vw,620px)", maxHeight: maxImageHeight, objectFit: "contain", display: "block", opacity: loaded ? 1 : 0 }} />`
           : html`<${CoverTile} platform=${album.media[0] && album.media[0].platform} />`}
         <div style=${{ position: "absolute", inset: 0, pointerEvents: "none", transition: "background 0.5s",
           background: isCenter ? "transparent" : `rgba(247,247,247,${Math.min(0.72, 0.5 + Math.max(0, abs - 1) * 0.18)})` }}></div>
@@ -1230,13 +1233,13 @@
         ${warn && html`<${WarnBar} text=${warn} />`}
 
         ${/* ---- HERO ---- */""}
-        <header style=${{ textAlign: "center", padding: "clamp(40px,7vh,84px) clamp(20px,5vw,64px) clamp(14px,2vh,26px)", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <div style=${{ marginBottom: "26px" }}><${Lockup} logoHeight="38px" fontSize="clamp(20px,2.6vw,28px)" /></div>
-          <h1 style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 600, fontSize: "clamp(38px,6vw,76px)", lineHeight: 1.02, margin: 0, letterSpacing: "-0.02em", color: "#1a1a1a" }}>Production Gallery</h1>
+        <header style=${{ textAlign: "center", padding: "clamp(28px,5vh,54px) clamp(20px,5vw,64px) clamp(12px,1.7vh,18px)", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div style=${{ marginBottom: "clamp(14px,2vh,18px)" }}><${Lockup} logoHeight="32px" fontSize="clamp(18px,2.1vw,24px)" /></div>
+          <h1 style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 600, fontSize: "clamp(34px,5vw,64px)", lineHeight: 1.02, margin: 0, letterSpacing: "-0.025em", color: "#1a1a1a" }}>Production Gallery</h1>
         </header>
 
         ${/* ---- SINGLE STICKY FILTER (visible before Hero and while browsing) */""}
-        <nav aria-label="กรองผลงานตามหมวดหมู่" style=${{ position: "sticky", top: 0, zIndex: 60, background: "rgba(244,244,244,0.96)", borderTop: "1px solid #e6e6e6", borderBottom: "1px solid #e6e6e6", display: "flex", alignItems: "center", gap: "clamp(12px,2vw,24px)", padding: "10px clamp(16px,5vw,64px)", backdropFilter: "blur(12px)" }}>
+        <nav aria-label="กรองผลงานตามหมวดหมู่" style=${{ position: "sticky", top: 0, zIndex: 60, background: "rgba(244,244,244,0.96)", borderTop: "1px solid #e6e6e6", borderBottom: "1px solid #e6e6e6", display: "flex", alignItems: "center", gap: "clamp(10px,1.6vw,20px)", padding: "8px clamp(16px,5vw,64px)", backdropFilter: "blur(12px)" }}>
           <div style=${{ display: "flex", alignItems: "baseline", gap: "9px", flex: "none" }}>
             <span style=${{ fontSize: "12px", letterSpacing: "0.14em", textTransform: "uppercase", color: "#666", fontWeight: 600 }}>Albums</span>
             <span aria-live="polite" style=${{ fontFamily: "'Quicksand',sans-serif", fontWeight: 700, fontSize: "16px", color: "#007339" }}>${len}</span>
@@ -1245,7 +1248,7 @@
             ${tabs.map(({ key, label }) => {
               const on = key === active;
               return html`<button key=${key} onClick=${() => selectTab(key)} aria-pressed=${on ? "true" : "false"}
-                style=${{ flex: "none", cursor: "pointer", fontFamily: "'Quicksand','Mitr',sans-serif", fontSize: "13px", padding: "8px 15px", minHeight: "38px", borderRadius: "999px",
+                style=${{ flex: "none", cursor: "pointer", fontFamily: "'Quicksand','Mitr',sans-serif", fontSize: "13px", padding: "7px 14px", minHeight: "36px", borderRadius: "999px",
                   fontWeight: on ? 600 : 500, border: on ? `1px solid ${GREEN}` : "1px solid #dfdfdf", background: on ? GREEN : "#ffffff", color: on ? "#063d22" : "#5f5f5f",
                   transition: "background 0.2s, color 0.2s, border-color 0.2s" }}>${label}</button>`;
             })}
@@ -1257,7 +1260,7 @@
           <${Fragment}>
             <section ref=${stageRef} data-testid="hero-carousel" onTouchStart=${swipeStart} onTouchMove=${swipeMove} onTouchEnd=${swipeEnd} onTouchCancel=${swipeEnd}
               role="region" aria-roledescription="carousel" aria-label="ผลงานแนะนำ ปัดนิ้วบนหน้าจอหรือปัดสองนิ้วบนทัชแพดเพื่อเลื่อน"
-              style=${{ position: "relative", isolation: "isolate", height: "clamp(300px,42vw,480px)", margin: "clamp(28px,4vh,52px) 0 clamp(8px,2vh,18px)", overflow: "hidden", touchAction: "pan-y pinch-zoom", overscrollBehaviorX: "contain" }}>
+              style=${{ position: "relative", isolation: "isolate", height: "clamp(320px, min(38vw, 48vh), 450px)", margin: "clamp(20px,3vh,28px) 0 clamp(6px,1.5vh,14px)", overflow: "hidden", touchAction: "pan-y pinch-zoom", overscrollBehaviorX: "contain" }}>
               ${filtered.map((d, i) => {
                 const off = circularCarouselOffset(i, curCenter, len);
                 const abs = Math.abs(off);
@@ -1269,19 +1272,19 @@
               })}
             </section>
 
-            <div style=${{ textAlign: "center", margin: "clamp(12px,2vh,20px) auto clamp(4px,1vh,8px)", minHeight: "46px", padding: "0 20px" }}>
-              <div data-testid="hero-title" style=${{ fontWeight: 500, fontSize: "clamp(17px,2vw,21px)", color: "#1f1f1f" }}>${activeTitle}</div>
-              <div style=${{ fontSize: "12.5px", color: "#007339", fontWeight: 600, letterSpacing: "0.03em", marginTop: "3px" }}>${activeMeta}</div>
+            <div style=${{ textAlign: "center", margin: "clamp(8px,1.4vh,13px) auto clamp(7px,1vh,10px)", minHeight: "44px", padding: "0 20px" }}>
+              <div data-testid="hero-title" style=${{ fontWeight: 500, fontSize: "clamp(16px,1.6vw,19px)", lineHeight: 1.25, color: "#1f1f1f" }}>${activeTitle}</div>
+              <div style=${{ fontSize: "12px", color: "#007339", fontWeight: 600, letterSpacing: "0.025em", marginTop: "3px" }}>${activeMeta}</div>
             </div>
 
-            <div style=${{ display: "flex", justifyContent: "center", gap: "14px", marginBottom: "clamp(18px,3vh,36px)" }}>
+            <div style=${{ display: "flex", justifyContent: "center", gap: "12px", marginBottom: "clamp(16px,2.5vh,26px)" }}>
               ${["←", "→"].map((arrow, k) => html`
                 <${ArrowBtn} key=${arrow} label=${arrow} ariaLabel=${k === 0 ? "ก่อนหน้า" : "ถัดไป"} onClick=${() => step(k === 0 ? -1 : 1)} />`)}
             </div>
           <//>`}
 
         ${/* ---- ALBUM GRID ---- */""}
-        <main data-testid="album-grid" style=${{ padding: "clamp(28px,4vw,56px) clamp(20px,5vw,64px) clamp(60px,10vh,120px)", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(clamp(260px,30vw,340px),1fr))", gridAutoRows: "8px", gridAutoFlow: "row dense", columnGap: "clamp(18px,2vw,30px)", rowGap: "clamp(18px,2vw,30px)", alignItems: "start" }}>
+        <main data-testid="album-grid" style=${{ padding: "clamp(24px,3vw,44px) clamp(20px,5vw,64px) clamp(60px,10vh,120px)", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(clamp(260px,30vw,340px),1fr))", gridAutoRows: "8px", gridAutoFlow: "row dense", columnGap: "clamp(18px,2vw,30px)", rowGap: "clamp(18px,2vw,30px)", alignItems: "start" }}>
           ${filtered.map((d) => html`<${GridCard} key=${d.id} album=${d} onOpen=${() => openAlbum(d.id)} />`)}
           ${status !== "ready" && html`<${StatePanel} status=${status} error=${error} />`}
           ${status === "ready" && len === 0 && html`<div style=${{ gridColumn: "1 / -1", textAlign: "center", padding: "64px 0", color: "#9a9a9a", fontSize: "16px" }}>ยังไม่มีอัลบั้มในหมวดนี้</div>`}
@@ -1304,7 +1307,7 @@
   function ArrowBtn({ label, ariaLabel, onClick }) {
     const [hover, setHover] = useState(false);
     return html`<button onClick=${onClick} aria-label=${ariaLabel} onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
-      style=${{ width: "46px", height: "46px", borderRadius: "50%", background: "#fff", border: `1px solid ${hover ? GREEN : "#e2e2e2"}`, color: hover ? GREEN : "#404040", cursor: "pointer", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>${label}</button>`;
+      style=${{ width: "44px", height: "44px", borderRadius: "50%", background: "#fff", border: `1px solid ${hover ? GREEN : "#e2e2e2"}`, color: hover ? GREEN : "#404040", cursor: "pointer", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" }}>${label}</button>`;
   }
 
   /* ---- Album grid card ----------------------------------------------------- */
