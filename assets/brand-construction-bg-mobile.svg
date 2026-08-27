@@ -15,16 +15,4 @@
   <rect width="1080" height="1920" fill="#F4F4F4"/>
   <rect width="1080" height="1920" fill="url(#glowTop)"/>
   <rect width="1080" height="1920" fill="url(#glowBottom)"/>
-
-  <g fill="none" stroke-linecap="square" stroke-linejoin="miter" shape-rendering="geometricPrecision" vector-effect="non-scaling-stroke">
-    <g stroke="#8F9D97" stroke-width="1.25" opacity=".17">
-      <path d="M930 0V1920"/>
-      <path d="M-110 560 505-55M780 2020 1140 1120"/>
-      <circle cx="1080" cy="1420" r="205"/>
-    </g>
-    <g stroke="#45A96E" stroke-width="1.4" opacity=".12">
-      <path d="M-110 560 505-55M780 2020 1140 1120"/>
-      <circle cx="1080" cy="1420" r="205"/>
-    </g>
-  </g>
 </svg>

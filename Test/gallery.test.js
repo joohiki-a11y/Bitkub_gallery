@@ -187,8 +187,9 @@ function makeModule(fetchImpl) {
   A((source.match(/data:image\/svg\+xml;base64,/g) || []).length === 2, "desktop and mobile use embedded resolution-independent vector backgrounds");
   A(source.includes('background-image: url("data:image/svg+xml;base64,'), "the vector background remains self-contained and browser-safe");
   A(!source.includes('background-image: image-set('), "the active background no longer depends on raster density switching");
-  A(desktopVector.includes('shape-rendering="geometricPrecision"') && mobileVector.includes('shape-rendering="geometricPrecision"'), "both vector masters request precise geometric rendering");
-  A(desktopVector.includes('vector-effect="non-scaling-stroke"') && mobileVector.includes('vector-effect="non-scaling-stroke"'), "construction lines keep a stable stroke when scaled");
+  A(!desktopVector.includes("<path") && !mobileVector.includes("<path"), "desktop and mobile backgrounds contain no construction lines");
+  A(!desktopVector.includes("<circle") && !mobileVector.includes("<circle"), "desktop and mobile backgrounds contain no construction circles");
+  A(desktopVector.includes("radialGradient") && mobileVector.includes("radialGradient"), "the backgrounds retain the approved soft color fades");
   A(!desktopVector.includes("<image") && !mobileVector.includes("<image"), "the vector masters contain no embedded AI raster artwork");
   A(source.includes('body::before'), "background remains fixed behind the scrolling gallery");
   A(source.includes('background: "transparent", minHeight: "100vh"'), "the gallery surface reveals the branded background");
